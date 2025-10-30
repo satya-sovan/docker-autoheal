@@ -502,9 +502,10 @@ async def update_observability_config(observability_config: dict):
             # Set root logger level
             logging.getLogger().setLevel(level)
 
-            # Set Uvicorn access logger to DEBUG to prevent HTTP request spam
-            uvicorn_access_logger = logging.getLogger("uvicorn.access")
-            uvicorn_access_logger.setLevel(logging.DEBUG)
+            # Disable uvicorn access logs completely
+            logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+            logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+            logging.getLogger("uvicorn").setLevel(logging.WARNING)
 
             logger.info(f"Log level changed to: {level_name}")
 
