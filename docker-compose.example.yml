@@ -1,0 +1,150 @@
+version: '3.8'
+
+# Docker Auto-Heal - Auto-Monitoring Example
+# This compose file demonstrates the auto-monitoring feature
+# Containers with autoheal=true label are automatically monitored
+
+services:
+  # Docker Auto-Heal Service
+  autoheal:
+    build: .
+    container_name: docker-autoheal
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./data:/data
+    ports:
+      - "8080:8080"  # Web UI
+      - "9090:9090"  # Prometheus metrics
+    environment:
+      - LOG_LEVEL=INFO
+    networks:
+      - autoheal-demo
+
+  # Example 1: Web server with auto-monitoring
+  # Will be automatically monitored when it starts
+  web:
+    image: nginx:alpine
+    container_name: demo-web-server
+    labels:
+      - "autoheal=true"
+      - "description=Web server with auto-monitoring"
+    ports:
+      - "8081:80"
+    networks:
+      - autoheal-demo
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Example 2: API with custom health check
+  # Auto-monitored with health endpoint
+  api:
+    image: python:3.11-alpine
+    container_name: demo-api-server
+    labels:
+      - "autoheal=true"
+      - "description=API server with health check"
+    command: sh -c "pip install fastapi uvicorn && python -c \"
+      from fastapi import FastAPI;
+      import uvicorn;
+      app = FastAPI();
+      @app.get('/health');
+      def health(): return {'status': 'healthy'};
+      uvicorn.run(app, host='0.0.0.0', port=8000)
+      \""
+    ports:
+      - "8082:8000"
+    networks:
+      - autoheal-demo
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Example 3: Database - NOT auto-monitored
+  # No autoheal label, so it won't be automatically monitored
+  database:
+    image: postgres:14-alpine
+    container_name: demo-database
+    environment:
+      POSTGRES_PASSWORD: example
+    ports:
+      - "5432:5432"
+    networks:
+      - autoheal-demo
+    # NOTE: No autoheal=true label, so this won't be auto-monitored
+    # This is intentional - databases often need manual intervention
+
+  # Example 4: Cache with auto-monitoring
+  # Redis with automatic monitoring
+  cache:
+    image: redis:7-alpine
+    container_name: demo-cache
+    labels:
+      - "autoheal=true"
+      - "description=Redis cache with auto-monitoring"
+    ports:
+      - "6379:6379"
+    networks:
+      - autoheal-demo
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Example 5: Worker with auto-monitoring
+  # Background worker that should be auto-restarted
+  worker:
+    image: busybox:latest
+    container_name: demo-worker
+    labels:
+      - "autoheal=true"
+      - "description=Background worker"
+    command: sh -c "while true; do echo 'Working...'; sleep 30; done"
+    networks:
+      - autoheal-demo
+    restart: unless-stopped
+
+networks:
+  autoheal-demo:
+    driver: bridge
+
+# Usage:
+# 1. Start all services:
+#    docker-compose -f docker-compose.example.yml up -d
+#
+# 2. Check auto-monitoring logs:
+#    docker logs docker-autoheal | grep "Auto-monitoring"
+#
+# 3. View the Web UI:
+#    http://localhost:8080
+#
+# 4. Check monitored containers:
+#    curl http://localhost:8080/api/config | jq '.containers.selected'
+#
+# 5. View auto-monitor events:
+#    curl http://localhost:8080/api/events | jq '.[] | select(.event_type=="auto_monitor")'
+#
+# Expected result:
+# - web, api, cache, worker: Automatically monitored (have autoheal=true)
+# - database: NOT monitored (no autoheal label)
+#
+# Test failure handling:
+# 6. Stop a container:
+#    docker stop demo-web-server
+#
+# 7. Watch it get restarted automatically:
+#    docker logs docker-autoheal | tail -f
+#
+# 8. Check events page:
+#    http://localhost:8080 -> Events tab
+#
+# Clean up:
+# docker-compose -f docker-compose.example.yml down -v
+

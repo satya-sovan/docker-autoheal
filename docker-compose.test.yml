@@ -1,0 +1,93 @@
+# Test script to verify Docker Auto-Heal Service
+# Run with Docker Compose to test the auto-heal functionality
+
+version: '3.8'
+
+services:
+  autoheal:
+    build: .
+    container_name: docker-autoheal
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/app/logs
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    environment:
+      - PYTHONUNBUFFERED=1
+    labels:
+      - "autoheal=false"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Test container 1: Healthy nginx
+  nginx-healthy:
+    image: nginx:alpine
+    container_name: nginx-healthy
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    labels:
+      - "autoheal=true"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Test container 2: Container that will fail (for testing restart)
+  failing-container:
+    image: alpine:latest
+    container_name: failing-container
+    restart: on-failure
+    labels:
+      - "autoheal=true"
+    # This will exit with code 1 after 30 seconds, triggering autoheal
+    command: sh -c "sleep 30 && exit 1"
+
+  # Test container 3: Container with custom health check (HTTP)
+  http-test:
+    image: python:3.11-alpine
+    container_name: http-test
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    ports:
+      - "8082:8000"
+    # Simple HTTP server for health check testing
+    command: python -m http.server 8000
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Test container 4: Redis with TCP health check
+  redis-test:
+    image: redis:alpine
+    container_name: redis-test
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Test container 5: Container not monitored (no label)
+  nginx-no-autoheal:
+    image: nginx:alpine
+    container_name: nginx-no-autoheal
+    restart: unless-stopped
+    ports:
+      - "8083:80"
+

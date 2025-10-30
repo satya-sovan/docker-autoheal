@@ -1,0 +1,38 @@
+# Alternative docker-compose for local React build
+
+version: '3.8'
+
+services:
+  autoheal:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    container_name: docker-autoheal
+    restart: unless-stopped
+
+    # Mount Docker socket to access Docker API
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs:/app/logs
+
+    # Port mappings
+    ports:
+      - "8080:8080"  # Web UI (React)
+      - "9090:9090"  # Prometheus metrics
+
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    # Labels for auto-heal (exclude itself from monitoring)
+    labels:
+      - "autoheal=false"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+

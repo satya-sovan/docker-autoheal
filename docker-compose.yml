@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  autoheal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: docker-autoheal
+    restart: unless-stopped
+
+    # Mount Docker socket to access Docker API
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./data:/data  # Persistent data storage (config, events, logs)
+
+    # Port mappings
+    ports:
+      - "8080:8080"  # Web UI (React)
+      - "9090:9090"  # Prometheus metrics
+
+    # Environment variables (optional, can be configured via UI)
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    # Labels for auto-heal (exclude itself from monitoring)
+    labels:
+      - "autoheal=false"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Example monitored container (for testing)
+  # nginx-test:
+  #   image: nginx:alpine
+  #   container_name: nginx-test
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8081:80"
+  #   labels:
+  #     - "autoheal=true"
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+  #     start_period: 10s
+
