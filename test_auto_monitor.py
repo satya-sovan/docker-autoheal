@@ -61,7 +61,7 @@ def test_auto_monitoring():
         print("Step 4: Verifying container was auto-monitored...")
         try:
             # Query the autoheal API
-            response = requests.get("http://localhost:8080/api/events", timeout=5)
+            response = requests.get("http://localhost:3131/api/events", timeout=5)
             if response.status_code == 200:
                 events = response.json()
 
@@ -85,7 +85,7 @@ def test_auto_monitoring():
             else:
                 print(f"⚠ API returned status code: {response.status_code}")
         except requests.exceptions.ConnectionError:
-            print("⚠ Could not connect to autoheal API at localhost:8080")
+            print("⚠ Could not connect to autoheal API at localhost:3131")
             print("  Make sure docker-autoheal service is running")
         except Exception as e:
             print(f"⚠ Error checking events: {e}")
@@ -94,7 +94,7 @@ def test_auto_monitoring():
         # Step 5: Verify container is in monitored list
         print("Step 5: Checking configuration...")
         try:
-            response = requests.get("http://localhost:8080/api/config", timeout=5)
+            response = requests.get("http://localhost:3131/api/config", timeout=5)
             if response.status_code == 200:
                 config = response.json()
                 selected = config.get("containers", {}).get("selected", [])
@@ -146,7 +146,7 @@ def test_auto_monitoring():
         time.sleep(3)
 
         try:
-            response = requests.get("http://localhost:8080/api/events", timeout=5)
+            response = requests.get("http://localhost:3131/api/events", timeout=5)
             if response.status_code == 200:
                 events = response.json()
                 auto_monitor_events = [

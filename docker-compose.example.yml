@@ -14,7 +14,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./data:/data
     ports:
-      - "8080:8080"  # Web UI
+      - "3131:3131"  # Web UI
       - "9090:9090"  # Prometheus metrics
     environment:
       - LOG_LEVEL=INFO
@@ -123,13 +123,13 @@ networks:
 #    docker logs docker-autoheal | grep "Auto-monitoring"
 #
 # 3. View the Web UI:
-#    http://localhost:8080
+#    http://localhost:3131
 #
 # 4. Check monitored containers:
-#    curl http://localhost:8080/api/config | jq '.containers.selected'
+#    curl http://localhost:3131/api/config | jq '.containers.selected'
 #
 # 5. View auto-monitor events:
-#    curl http://localhost:8080/api/events | jq '.[] | select(.event_type=="auto_monitor")'
+#    curl http://localhost:3131/api/events | jq '.[] | select(.event_type=="auto_monitor")'
 #
 # Expected result:
 # - web, api, cache, worker: Automatically monitored (have autoheal=true)
@@ -143,7 +143,7 @@ networks:
 #    docker logs docker-autoheal | tail -f
 #
 # 8. Check events page:
-#    http://localhost:8080 -> Events tab
+#    http://localhost:3131 -> Events tab
 #
 # Clean up:
 # docker-compose -f docker-compose.example.yml down -v

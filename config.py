@@ -57,7 +57,7 @@ class UIConfig(BaseModel):
     """UI configuration settings"""
     enable: bool = Field(default=True, description="Enable web UI")
     listen_address: str = Field(default="0.0.0.0", description="UI listen address")
-    listen_port: int = Field(default=8080, ge=1, le=65535, description="UI listen port")
+    listen_port: int = Field(default=3131, ge=1, le=65535, description="UI listen port")
     allow_export_json: bool = Field(default=True, description="Allow configuration export")
     allow_import_json: bool = Field(default=True, description="Allow configuration import")
     max_log_entries: int = Field(default=50, ge=1, description="Maximum log entries to keep in memory")

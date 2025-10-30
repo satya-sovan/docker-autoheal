@@ -9,7 +9,7 @@ import time
 import json
 from datetime import datetime, timezone
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = "http://localhost:3131"
 API_URL = f"{BASE_URL}/api"
 
 
@@ -275,7 +275,7 @@ def run_interactive_demo():
                 enable_autoheal_for_container(container_id)
         elif choice == '5':
             container_id = input("Enter container ID or name: ").strip()
-            endpoint = input("Enter HTTP endpoint (e.g., http://localhost:8080/health): ").strip()
+            endpoint = input("Enter HTTP endpoint (e.g., http://localhost:3131/health): ").strip()
             if container_id and endpoint:
                 add_http_health_check(container_id, endpoint)
         elif choice == '6':

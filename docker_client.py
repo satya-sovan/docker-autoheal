@@ -193,7 +193,7 @@ class DockerClientWrapper:
         Perform HTTP health check on container
         Args:
             container: Container object
-            endpoint: HTTP endpoint to check (e.g., "http://localhost:8080/health")
+            endpoint: HTTP endpoint to check (e.g., "http://localhost:3131/health")
             expected_status: Expected HTTP status code
             timeout: Request timeout
         Returns:

@@ -8,7 +8,7 @@ import requests
 import sys
 import time
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = "http://localhost:3131"
 
 def print_status(emoji, message):
     print(f"{emoji} {message}")

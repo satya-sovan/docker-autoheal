@@ -30,7 +30,7 @@
   "ui": {
     "enable": true,
     "listen_address": "0.0.0.0",
-    "listen_port": 8080,
+    "listen_port": 3131,
     "allow_export_json": true,
     "allow_import_json": true,
     "max_log_entries": 50

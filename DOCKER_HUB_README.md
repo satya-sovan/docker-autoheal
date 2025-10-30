@@ -13,13 +13,13 @@ docker run -d \
   --name docker-autoheal \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v ./data:/data \
-  -p 8080:8080 \
+  -p 3131:3131 \
   -p 9090:9090 \
   --restart unless-stopped \
   yourusername/docker-autoheal:latest
 ```
 
-**Access the Web UI:** http://localhost:8080
+**Access the Web UI:** http://localhost:3131
 
 ## 📦 What's Included
 
@@ -74,7 +74,7 @@ docker run -d \
 docker run -d \
   --name docker-autoheal \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  -p 8080:8080 \
+  -p 3131:3131 \
   yourusername/docker-autoheal:latest
 ```
 
@@ -86,7 +86,7 @@ docker run -d \
   --restart unless-stopped \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v /path/to/data:/data \
-  -p 8080:8080 \
+  -p 3131:3131 \
   -p 9090:9090 \
   -e AUTOHEAL_INTERVAL=30 \
   -e AUTOHEAL_LOG_LEVEL=INFO \
@@ -107,7 +107,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./data:/data  # Persist configuration and state
     ports:
-      - "8080:8080"  # Web UI
+      - "3131:3131"  # Web UI
       - "9090:9090"  # Prometheus metrics
     environment:
       - AUTOHEAL_INTERVAL=30
@@ -163,7 +163,7 @@ services:
 
 ### Web UI Configuration
 
-All settings can be configured through the web interface at `http://localhost:8080`:
+All settings can be configured through the web interface at `http://localhost:3131`:
 
 - **Monitor Settings**: Interval, label filtering
 - **Restart Policies**: Cooldowns, max restarts, backoff strategies  
@@ -198,7 +198,7 @@ Available metrics:
 
 Service health endpoint:
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:3131/health
 ```
 
 ### Logs
@@ -225,7 +225,7 @@ Logs are also persisted to `/data/logs/autoheal.log`
    ```bash
    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock alpine ls -l /var/run/docker.sock
    ```
-2. Check port availability (8080, 9090)
+2. Check port availability (3131, 9090)
 3. Review logs for specific errors
 
 ### Container Quarantined
@@ -264,7 +264,7 @@ For production:
 │                                          │
 │  ┌────────────┐      ┌──────────────┐   │
 │  │ React UI   │─────►│ FastAPI      │   │
-│  │ (Port 8080)│      │ Backend      │   │
+│  │ (Port 3131)│      │ Backend      │   │
 │  └────────────┘      └──────┬───────┘   │
 │                             │           │
 │  ┌──────────────────────────▼────────┐  │
@@ -289,7 +289,7 @@ For production:
 ## 📚 Additional Resources
 
 - **Documentation**: Full docs at [GitHub Repository]
-- **API Reference**: `http://localhost:8080/docs` (Swagger UI)
+- **API Reference**: `http://localhost:3131/docs` (Swagger UI)
 - **Issues & Support**: [GitHub Issues]
 - **Changelog**: See GitHub releases
 
