@@ -55,10 +55,10 @@ def update_log_level(level_name: str):
     # Set root logger level
     logging.getLogger().setLevel(level)
 
-    # Set Uvicorn access logger to DEBUG to prevent HTTP request spam
-    # Access logs will only show if root level is DEBUG
-    uvicorn_access_logger = logging.getLogger("uvicorn.access")
-    uvicorn_access_logger.setLevel(logging.DEBUG)
+    # Disable uvicorn access logs completely (set to WARNING to suppress INFO logs)
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
 
     logger.info(f"Log level set to: {level_name}")
 
@@ -167,15 +167,13 @@ async def run_api_server():
     # Map our log level to uvicorn format (lowercase)
     uvicorn_log_level = config.observability.log_level.lower()
 
-    # Only enable access logs for DEBUG level to prevent spam
-    enable_access_log = config.observability.log_level.upper() == "DEBUG"
-
+    # Disable all uvicorn access logs completely
     uvicorn_config = uvicorn.Config(
         app,
         host=config.ui.listen_address,
         port=config.ui.listen_port,
-        log_level=uvicorn_log_level,
-        access_log=enable_access_log,  # Only show access logs at DEBUG level
+        log_level="warning",  # Set to warning to suppress info logs
+        access_log=False,  # Completely disable access logs
         log_config=None  # Use default logging config
     )
 
