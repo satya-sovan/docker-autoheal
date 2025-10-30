@@ -568,7 +568,7 @@ class MonitoringEngine:
                 config_manager.update_config(config)
 
                 # Log the auto-monitoring
-                logger.info(f"✓ Auto-monitoring enabled for container '{container_name}' ({container_id[:12]}) - detected autoheal=true label")
+                logger.info(f"Auto-monitoring enabled for container '{container_name}' ({container_id[:12]}) - detected autoheal=true label")
 
                 # Create an event for this
                 event_obj = AutoHealEvent(

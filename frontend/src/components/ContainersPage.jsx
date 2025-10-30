@@ -15,6 +15,7 @@ function ContainersPage() {
   const [showModal, setShowModal] = useState(false);
   const [modalContainer, setModalContainer] = useState(null);
   const [alert, setAlert] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ show: false, title: '', message: '', onConfirm: null });
 
   const fetchContainers = async () => {
     try {
@@ -36,6 +37,21 @@ function ContainersPage() {
   const showAlert = (variant, message) => {
     setAlert({ variant, message });
     setTimeout(() => setAlert(null), 5000);
+  };
+
+  const showConfirm = (title, message, onConfirm) => {
+    setConfirmModal({ show: true, title, message, onConfirm });
+  };
+
+  const handleConfirm = () => {
+    if (confirmModal.onConfirm) {
+      confirmModal.onConfirm();
+    }
+    setConfirmModal({ show: false, title: '', message: '', onConfirm: null });
+  };
+
+  const handleCancelConfirm = () => {
+    setConfirmModal({ show: false, title: '', message: '', onConfirm: null });
   };
 
   const toggleSelection = (containerId) => {
@@ -79,27 +95,35 @@ function ContainersPage() {
   };
 
   const handleRestart = async (containerId, containerName) => {
-    if (!window.confirm(`Restart container "${containerName}"?`)) return;
-
-    try {
-      await restartContainer(containerId);
-      showAlert('success', `Container "${containerName}" restarted`);
-      fetchContainers();
-    } catch (error) {
-      showAlert('danger', 'Failed to restart container');
-    }
+    showConfirm(
+      'Restart Container',
+      `Are you sure you want to restart container "${containerName}"?`,
+      async () => {
+        try {
+          await restartContainer(containerId);
+          showAlert('success', `Container "${containerName}" restarted`);
+          fetchContainers();
+        } catch (error) {
+          showAlert('danger', 'Failed to restart container');
+        }
+      }
+    );
   };
 
   const handleUnquarantine = async (containerId, containerName) => {
-    if (!window.confirm(`Remove "${containerName}" from quarantine?`)) return;
-
-    try {
-      await unquarantineContainer(containerId);
-      showAlert('success', `Container "${containerName}" removed from quarantine`);
-      fetchContainers();
-    } catch (error) {
-      showAlert('danger', 'Failed to unquarantine container');
-    }
+    showConfirm(
+      'Remove from Quarantine',
+      `Are you sure you want to remove "${containerName}" from quarantine?`,
+      async () => {
+        try {
+          await unquarantineContainer(containerId);
+          showAlert('success', `Container "${containerName}" removed from quarantine`);
+          fetchContainers();
+        } catch (error) {
+          showAlert('danger', 'Failed to unquarantine container');
+        }
+      }
+    );
   };
 
   const showContainerDetails = async (containerId) => {
@@ -313,6 +337,24 @@ function ContainersPage() {
             </div>
           )}
         </Modal.Body>
+      </Modal>
+
+      {/* Confirmation Modal */}
+      <Modal show={confirmModal.show} onHide={handleCancelConfirm} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{confirmModal.title}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {confirmModal.message}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCancelConfirm}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleConfirm}>
+            Confirm
+          </Button>
+        </Modal.Footer>
       </Modal>
     </>
   );

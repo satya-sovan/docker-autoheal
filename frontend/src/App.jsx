@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Container } from 'react-bootstrap';
+import { Container, Toast, ToastContainer } from 'react-bootstrap';
 import Navigation from './components/Navigation';
 import Dashboard from './components/Dashboard';
 import ContainersPage from './components/ContainersPage';
@@ -17,6 +17,7 @@ function App() {
   const [systemStatus, setSystemStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [errorToast, setErrorToast] = useState({ show: false, message: '' });
 
   const fetchSystemStatus = async () => {
     try {
@@ -43,7 +44,7 @@ function App() {
       await fetchSystemStatus();
     } catch (error) {
       console.error('Failed to toggle maintenance mode:', error);
-      alert('Failed to toggle maintenance mode. Please try again.');
+      setErrorToast({ show: true, message: 'Failed to toggle maintenance mode. Please try again.' });
     }
   };
 
@@ -91,6 +92,22 @@ function App() {
         startTime={systemStatus?.maintenance_start_time}
         onDismiss={handleDismissMaintenanceModal}
       />
+
+      {/* Error Toast Notification */}
+      <ToastContainer position="top-end" className="p-3" style={{ zIndex: 9999 }}>
+        <Toast
+          show={errorToast.show}
+          onClose={() => setErrorToast({ show: false, message: '' })}
+          autohide
+          delay={5000}
+          bg="danger"
+        >
+          <Toast.Header>
+            <strong className="me-auto">Error</strong>
+          </Toast.Header>
+          <Toast.Body className="text-white">{errorToast.message}</Toast.Body>
+        </Toast>
+      </ToastContainer>
     </div>
   );
 }
