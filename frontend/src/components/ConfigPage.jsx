@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Form, Button, Alert, Spinner } from 'react-bootstrap';
+import { Card, Row, Col, Form, Button, Alert, Spinner, Modal } from 'react-bootstrap';
 import {
   getConfig,
   updateMonitorConfig,
@@ -14,6 +14,7 @@ function ConfigPage() {
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState(null);
   const [showInfoAlert, setShowInfoAlert] = useState(true);
+  const [validationModal, setValidationModal] = useState({ show: false, title: '', message: '', suggestions: [] });
 
   const fetchConfig = async () => {
     try {
@@ -37,8 +38,70 @@ function ConfigPage() {
     setTimeout(() => setAlert(null), timeout);
   };
 
+  const validateTimingConfiguration = () => {
+    const monitorInterval = config.monitor.interval_seconds;
+    const cooldown = config.restart.cooldown_seconds;
+    const maxRestarts = config.restart.max_restarts;
+    const restartWindow = config.restart.max_restarts_window_seconds;
+
+    const errors = [];
+    const suggestions = [];
+
+    // Validation 1: Restart window must be larger than the time needed for max restarts (based on cooldown)
+    const minRestartWindowForCooldown = maxRestarts * cooldown;
+    if (restartWindow < minRestartWindowForCooldown) {
+      errors.push(`❌ Restart window (${restartWindow}s) is too small for ${maxRestarts} restarts with ${cooldown}s cooldown`);
+      suggestions.push(`Increase "Max Restarts Window" to at least ${minRestartWindowForCooldown} seconds (${maxRestarts} restarts × ${cooldown}s cooldown)`);
+      suggestions.push(`OR reduce "Max Restarts" to ${Math.floor(restartWindow / Math.max(cooldown, 1))} or less`);
+      suggestions.push(`OR reduce "Cooldown" to ${Math.floor(restartWindow / maxRestarts)} seconds or less`);
+    }
+
+    // Validation 2: Restart window must be larger than the time needed for monitoring cycles
+    const minRestartWindowForMonitoring = maxRestarts * monitorInterval;
+    if (restartWindow < minRestartWindowForMonitoring) {
+      errors.push(`❌ Restart window (${restartWindow}s) is too small for ${maxRestarts} monitoring cycles with ${monitorInterval}s interval`);
+      suggestions.push(`Increase "Max Restarts Window" to at least ${minRestartWindowForMonitoring} seconds (${maxRestarts} cycles × ${monitorInterval}s interval)`);
+      suggestions.push(`OR reduce "Max Restarts" to ${Math.floor(restartWindow / monitorInterval)} or less`);
+      suggestions.push(`OR reduce "Monitoring Interval" to ${Math.floor(restartWindow / maxRestarts)} seconds or less`);
+    }
+
+    // Validation 3: Extremely short monitoring interval warning (performance concern)
+    if (monitorInterval < 5) {
+      errors.push(`⚠️ Very short monitoring interval (${monitorInterval}s) may cause high CPU usage`);
+      suggestions.push(`Consider setting "Monitoring Interval" to at least 5 seconds for better performance`);
+    }
+
+    // Validation 4: Very short restart window warning (may cause premature quarantine)
+    if (restartWindow < 60) {
+      errors.push(`⚠️ Short restart window (${restartWindow}s) may cause premature quarantine`);
+      suggestions.push(`Consider setting "Max Restarts Window" to at least 60 seconds for more stable operation`);
+    }
+
+    // Validation 5: Extremely long monitoring interval warning (may be too slow to detect issues)
+    if (monitorInterval > 300) {
+      errors.push(`⚠️ Very long monitoring interval (${monitorInterval}s) may be slow to detect container issues`);
+      suggestions.push(`Consider reducing "Monitoring Interval" to 60 seconds or less for more responsive monitoring`);
+    }
+
+    return { isValid: errors.length === 0, errors, suggestions };
+  };
+
   const handleMonitorConfigSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate timing configuration
+    const validation = validateTimingConfiguration();
+    if (!validation.isValid) {
+      setValidationModal({
+        show: true,
+        title: 'Invalid Monitor Settings Configuration',
+        message: 'The monitoring interval conflicts with your restart policy settings:',
+        errors: validation.errors,
+        suggestions: validation.suggestions
+      });
+      return;
+    }
+
     try {
       await updateMonitorConfig(config.monitor);
       showAlert('success', 'Monitor configuration updated');
@@ -50,6 +113,20 @@ function ConfigPage() {
 
   const handleRestartConfigSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate timing configuration
+    const validation = validateTimingConfiguration();
+    if (!validation.isValid) {
+      setValidationModal({
+        show: true,
+        title: 'Invalid Restart Policy Configuration',
+        message: 'The restart policy settings conflict with your monitoring configuration:',
+        errors: validation.errors,
+        suggestions: validation.suggestions
+      });
+      return;
+    }
+
     try {
       await updateRestartConfig(config.restart);
       showAlert('success', 'Restart policy updated');
@@ -414,6 +491,79 @@ function ConfigPage() {
           </Card>
         </Col>
       </Row>
+
+      {/* Validation Modal */}
+      <Modal
+        show={validationModal.show}
+        onHide={() => setValidationModal({ ...validationModal, show: false })}
+        size="lg"
+        centered
+      >
+        <Modal.Header closeButton className="bg-warning text-dark">
+          <Modal.Title>
+            <i className="bi bi-exclamation-triangle-fill me-2"></i>
+            {validationModal.title}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="mb-3">
+            <p className="fw-bold mb-2">{validationModal.message}</p>
+            {validationModal.errors && validationModal.errors.length > 0 && (
+              <div className="alert alert-danger mb-3">
+                <strong>Issues Found:</strong>
+                <ul className="mb-0 mt-2">
+                  {validationModal.errors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {validationModal.suggestions && validationModal.suggestions.length > 0 && (
+            <div className="alert alert-info">
+              <strong><i className="bi bi-lightbulb-fill me-2"></i>Recommended Solutions:</strong>
+              <ul className="mb-0 mt-2">
+                {validationModal.suggestions.map((suggestion, index) => (
+                  <li key={index} className="mb-1">{suggestion}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="alert alert-light border mt-3">
+            <strong><i className="bi bi-info-circle me-2"></i>Current Configuration:</strong>
+            <div className="mt-2 small">
+              <div><strong>Monitoring Interval:</strong> {config?.monitor.interval_seconds} seconds</div>
+              <div><strong>Cooldown:</strong> {config?.restart.cooldown_seconds} seconds</div>
+              <div><strong>Max Restarts:</strong> {config?.restart.max_restarts}</div>
+              <div><strong>Max Restarts Window:</strong> {config?.restart.max_restarts_window_seconds} seconds</div>
+            </div>
+          </div>
+
+          <div className="alert alert-success border mt-3">
+            <strong><i className="bi bi-check-circle me-2"></i>How These Settings Work Together:</strong>
+            <ul className="mb-0 mt-2 small">
+              <li><strong>Monitoring Interval:</strong> How often the system checks container health</li>
+              <li><strong>Cooldown:</strong> Wait time between restart attempts</li>
+              <li><strong>Max Restarts:</strong> Maximum restart attempts before quarantine</li>
+              <li><strong>Max Restarts Window:</strong> Time window for counting restarts (must fit all restart attempts)</li>
+            </ul>
+            <div className="mt-2 small text-muted">
+              <em>Formula: Max Restarts Window ≥ MAX(Max Restarts × Cooldown, Max Restarts × Monitoring Interval)</em>
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setValidationModal({ ...validationModal, show: false })}
+          >
+            <i className="bi bi-x-circle me-1"></i>
+            Close and Adjust Settings
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 }

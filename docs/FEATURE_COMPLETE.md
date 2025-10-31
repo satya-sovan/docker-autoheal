@@ -227,7 +227,7 @@ python test_auto_monitor.py
 ```
 
 ### Production Rollout
-1. Review [AUTO_MONITOR_FEATURE.md](./docs/AUTO_MONITOR_FEATURE.md)
+1. Review [AUTO_MONITOR_FEATURE.md](AUTO_MONITOR_FEATURE.md)
 2. Test with non-critical containers first
 3. Add labels to production containers gradually
 4. Monitor the events page for verification

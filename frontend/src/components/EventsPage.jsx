@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Card, Button, Spinner, Badge } from 'react-bootstrap';
-import { getEvents } from '../services/api';
+import { Card, Button, Spinner, Badge, Alert, Modal } from 'react-bootstrap';
+import { getEvents, clearEvents } from '../services/api';
 import { format } from 'date-fns';
 
 function EventsPage() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [alert, setAlert] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const fetchEvents = async () => {
     try {
@@ -18,9 +20,32 @@ function EventsPage() {
     }
   };
 
+  const handleClearEventsClick = () => {
+    setShowConfirmModal(true);
+  };
+
+  const handleCancelClear = () => {
+    setShowConfirmModal(false);
+  };
+
+  const handleConfirmClear = async () => {
+    setShowConfirmModal(false);
+
+    try {
+      await clearEvents();
+      setEvents([]);
+      setAlert({ type: 'success', message: 'All events cleared successfully!' });
+      setTimeout(() => setAlert(null), 3000);
+    } catch (error) {
+      console.error('Failed to clear events:', error);
+      setAlert({ type: 'danger', message: 'Failed to clear events. Please try again.' });
+      setTimeout(() => setAlert(null), 5000);
+    }
+  };
+
   useEffect(() => {
     fetchEvents();
-    const interval = setInterval(fetchEvents, 30000);
+    const interval = setInterval(fetchEvents, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -58,13 +83,29 @@ function EventsPage() {
           <i className="bi bi-clock-history me-2"></i>
           Event Log
         </h5>
-        <Button variant="primary" size="sm" onClick={fetchEvents}>
-          <i className="bi bi-arrow-clockwise me-1"></i>
-          Refresh
-        </Button>
+        <div>
+          <Button variant="primary" size="sm" onClick={fetchEvents} className="me-2">
+            <i className="bi bi-arrow-clockwise me-1"></i>
+            Refresh
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={handleClearEventsClick}
+            disabled={events.length === 0}
+          >
+            <i className="bi bi-trash me-1"></i>
+            Clear All
+          </Button>
+        </div>
       </Card.Header>
 
       <Card.Body style={{ maxHeight: '600px', overflowY: 'auto' }}>
+        {alert && (
+          <Alert variant={alert.type} dismissible onClose={() => setAlert(null)} className="mb-3">
+            {alert.message}
+          </Alert>
+        )}
         {events.length === 0 ? (
           <div className="text-center py-4 text-muted">
             No events recorded yet
@@ -105,6 +146,35 @@ function EventsPage() {
           </div>
         )}
       </Card.Body>
+
+      {/* Confirmation Modal */}
+      <Modal show={showConfirmModal} onHide={handleCancelClear} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <i className="bi bi-exclamation-triangle text-warning me-2"></i>
+            Confirm Clear Events
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-0">
+            Are you sure you want to clear all events? This action cannot be undone.
+          </p>
+          <p className="text-muted small mt-2 mb-0">
+            <i className="bi bi-info-circle me-1"></i>
+            {events.length} event{events.length !== 1 ? 's' : ''} will be permanently deleted.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCancelClear}>
+            <i className="bi bi-x-circle me-1"></i>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleConfirmClear}>
+            <i className="bi bi-trash me-1"></i>
+            Clear All Events
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Card>
   );
 }

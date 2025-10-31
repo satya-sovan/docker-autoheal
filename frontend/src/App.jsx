@@ -71,17 +71,23 @@ function App() {
           transition: 'opacity 0.3s ease'
         }}
       >
-        {!loading && systemStatus && (
-          <Dashboard
-            systemStatus={systemStatus}
-            onRefresh={fetchSystemStatus}
-            onMaintenanceToggle={handleMaintenanceToggle}
-          />
-        )}
-
         <Routes>
           <Route path="/" element={<Navigate to="/containers" replace />} />
-          <Route path="/containers" element={<ContainersPage />} />
+          <Route
+            path="/containers"
+            element={
+              <>
+                {!loading && systemStatus && (
+                  <Dashboard
+                    systemStatus={systemStatus}
+                    onRefresh={fetchSystemStatus}
+                    onMaintenanceToggle={handleMaintenanceToggle}
+                  />
+                )}
+                <ContainersPage />
+              </>
+            }
+          />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/config" element={<ConfigPage />} />
         </Routes>
