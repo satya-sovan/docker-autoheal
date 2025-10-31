@@ -263,6 +263,7 @@ docker-compose restart
 ```python
 # Run in Python shell
 import docker
+
 client = docker.from_env()
 container = client.containers.get('test-dummy')
 container.reload()
@@ -271,7 +272,8 @@ print(f"Docker says: {docker_restart_count}")
 
 # Check config.json
 import json
-with open('data/config.json') as f:
+
+with open('../data/config.json') as f:
     config = json.load(f)
     config_restart_count = config['containers']['restart_counts'].get('test-dummy', 0)
     print(f"Config says: {config_restart_count}")
