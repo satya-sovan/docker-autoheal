@@ -146,6 +146,7 @@ async def list_containers(include_stopped: bool = False):
                 continue
 
             container_id = info.get("full_id")
+            stable_id = info.get("stable_id")  # Get stable identifier
 
             # Check if monitored
             monitored = False
@@ -155,6 +156,9 @@ async def list_containers(include_stopped: bool = False):
             # Check if quarantined
             quarantined = config_manager.is_quarantined(container_id)
 
+            # Get locally tracked restart count (persists across container recreations)
+            locally_tracked_restarts = config_manager.get_total_restart_count(stable_id)
+
             container_info = ContainerInfo(
                 id=info.get("id"),
                 name=info.get("name"),
@@ -163,7 +167,7 @@ async def list_containers(include_stopped: bool = False):
                 state=info.get("state", {}),
                 labels=info.get("labels", {}),
                 health=info.get("health"),
-                restart_count=info.get("restart_count", 0),
+                restart_count=locally_tracked_restarts,  # Use locally tracked count instead of Docker's
                 monitored=monitored,
                 quarantined=quarantined
             )
@@ -188,20 +192,17 @@ async def get_container_details(container_id: str):
 
         info = docker_client.get_container_info(container)
 
-        # Use container name as primary identifier (persists across recreations)
+        # Use stable_id for tracking (persists across recreations)
         full_container_id = info.get("full_id")
         container_name = info.get("name")
+        stable_id = info.get("stable_id")
 
-        # Get restart history (by name first, then ID for backwards compatibility)
-        restart_count = config_manager.get_restart_count(
-            container_name,
+        # Get locally tracked restart counts (using stable_id)
+        recent_restart_count = config_manager.get_restart_count(
+            stable_id,
             config_manager.get_config().restart.max_restarts_window_seconds
         )
-        if restart_count == 0:
-            restart_count = config_manager.get_restart_count(
-                full_container_id,
-                config_manager.get_config().restart.max_restarts_window_seconds
-            )
+        total_restart_count = config_manager.get_total_restart_count(stable_id)
 
         # Check monitoring status
         monitored = False
@@ -216,11 +217,15 @@ async def get_container_details(container_id: str):
         if not custom_hc:
             custom_hc = config_manager.get_custom_health_check(full_container_id)
 
+        # Override restart_count in info with locally tracked count
+        info["restart_count"] = total_restart_count
+
         return {
             **info,
             "monitored": monitored,
             "quarantined": quarantined,
-            "recent_restart_count": restart_count,
+            "recent_restart_count": recent_restart_count,
+            "total_restart_count": total_restart_count,
             "custom_health_check": custom_hc
         }
     except HTTPException:

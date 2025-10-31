@@ -31,7 +31,7 @@ class BackoffConfig(BaseModel):
 
 class RestartConfig(BaseModel):
     """Restart policy configuration"""
-    mode: str = Field(default="both", description="Restart mode: on-failure, health, or both")
+    mode: str = Field(default="on-failure", description="Restart mode: on-failure, health, or both")
     cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown between restarts")
     max_restarts: int = Field(default=3, ge=1, description="Maximum restarts within window")
     max_restarts_window_seconds: int = Field(default=600, ge=1, description="Time window for max restarts")
@@ -43,6 +43,7 @@ class ContainersConfig(BaseModel):
     """Container selection configuration"""
     selected: List[str] = Field(default_factory=list, description="Explicitly selected container IDs/names")
     excluded: List[str] = Field(default_factory=list, description="Explicitly excluded container IDs/names")
+    restart_counts: Dict[str, int] = Field(default_factory=dict, description="Restart counts by stable_id")
 
 
 class FiltersConfig(BaseModel):
@@ -140,7 +141,7 @@ class ConfigManager:
         self._config = self._load_config()
         self._event_log: List[AutoHealEvent] = self._load_events()
         self._custom_health_checks: Dict[str, HealthCheckConfig] = self._load_custom_health_checks()
-        self._container_restart_counts: Dict[str, List[datetime]] = self._load_restart_counts()
+        # _container_restart_counts removed - now stored in self._config.containers.restart_counts
         self._quarantined_containers: set = self._load_quarantine()
         self._maintenance_mode: bool = False
         self._maintenance_start_time: Optional[datetime] = None
@@ -227,36 +228,7 @@ class ConfigManager:
         """Load custom health checks (already loaded in _load_config)"""
         return getattr(self, '_custom_health_checks', {})
 
-    def _load_restart_counts(self) -> Dict[str, List[datetime]]:
-        """Load restart counts from file or return empty dict"""
-        try:
-            if self.RESTART_COUNTS_FILE.exists():
-                with open(self.RESTART_COUNTS_FILE, 'r') as f:
-                    data = json.load(f)
-                    # Convert ISO strings back to datetime objects
-                    restart_counts = {
-                        cid: [datetime.fromisoformat(ts) for ts in timestamps]
-                        for cid, timestamps in data.items()
-                    }
-                    logger.info(f"Loaded restart counts for {len(restart_counts)} containers from disk")
-                    return restart_counts
-        except Exception as e:
-            logger.warning(f"Failed to load restart counts from disk: {e}")
-        return {}
-
-    def _save_restart_counts(self) -> None:
-        """Save restart counts to file"""
-        try:
-            # Convert datetime objects to ISO strings
-            data = {
-                cid: [ts.isoformat() for ts in timestamps]
-                for cid, timestamps in self._container_restart_counts.items()
-            }
-            with open(self.RESTART_COUNTS_FILE, 'w') as f:
-                json.dump(data, f, indent=2)
-            logger.debug(f"Saved restart counts for {len(data)} containers to disk")
-        except Exception as e:
-            logger.error(f"Failed to save restart counts to disk: {e}")
+    # Restart counts are now stored in config.json, no separate file needed
 
     def _load_quarantine(self) -> set:
         """Load quarantine list from file or return empty set"""
@@ -401,36 +373,41 @@ class ConfigManager:
             return self._custom_health_checks.copy()
 
     def record_restart(self, container_id: str) -> None:
-        """Record a container restart timestamp"""
+        """Record a container restart - increment count in config.json"""
         with self._lock:
-            if container_id not in self._container_restart_counts:
-                self._container_restart_counts[container_id] = []
-            self._container_restart_counts[container_id].append(datetime.now(timezone.utc))
-            self._save_restart_counts()
+            if container_id not in self._config.containers.restart_counts:
+                self._config.containers.restart_counts[container_id] = 0
+            self._config.containers.restart_counts[container_id] += 1
+            self._save_config()
 
     def get_restart_count(self, container_id: str, window_seconds: int) -> int:
-        """Get restart count within time window"""
+        """Get restart count - returns total count (window filtering removed, kept for compatibility)"""
         with self._lock:
-            if container_id not in self._container_restart_counts:
-                return 0
+            return self._config.containers.restart_counts.get(container_id, 0)
 
-            now = datetime.now(timezone.utc)
-            restarts = self._container_restart_counts[container_id]
+    def get_total_restart_count(self, container_id: str) -> int:
+        """Get total restart count (all time) - from config.json"""
+        with self._lock:
+            return self._config.containers.restart_counts.get(container_id, 0)
 
-            # Filter restarts within window
-            recent_restarts = [
-                r for r in restarts
-                if (now - r).total_seconds() <= window_seconds
-            ]
+    def cleanup_restart_counts(self, active_container_ids: List[str]) -> None:
+        """Remove restart counts for containers that no longer exist"""
+        with self._lock:
+            # Get current restart counts
+            current_counts = self._config.containers.restart_counts.copy()
 
-            # Update the list to only keep recent restarts
-            self._container_restart_counts[container_id] = recent_restarts
+            # Keep only counts for active containers
+            cleaned_counts = {
+                cid: count for cid, count in current_counts.items()
+                if cid in active_container_ids
+            }
 
-            # Persist the cleaned-up data
-            if len(recent_restarts) != len(restarts):
-                self._save_restart_counts()
-
-            return len(recent_restarts)
+            # Update if anything was removed
+            if len(cleaned_counts) < len(current_counts):
+                self._config.containers.restart_counts = cleaned_counts
+                self._save_config()
+                removed_count = len(current_counts) - len(cleaned_counts)
+                logger.info(f"Cleaned up restart counts for {removed_count} removed containers")
 
     def quarantine_container(self, container_id: str) -> None:
         """Mark container as quarantined"""
@@ -457,8 +434,9 @@ class ConfigManager:
     def clear_restart_history(self, container_id: str) -> None:
         """Clear restart history for a container"""
         with self._lock:
-            self._container_restart_counts.pop(container_id, None)
-            self._save_restart_counts()
+            if container_id in self._config.containers.restart_counts:
+                del self._config.containers.restart_counts[container_id]
+                self._save_config()
 
     def enable_maintenance_mode(self) -> None:
         """Enable maintenance mode"""
