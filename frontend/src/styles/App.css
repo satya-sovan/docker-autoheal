@@ -147,6 +147,18 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* Override fixed positioning for alerts inside modals */
+.modal .alert {
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: none;
+  z-index: auto;
+  min-width: auto;
+  max-width: none;
+  box-shadow: none;
+}
+
 /* Code blocks */
 pre {
   background-color: #f8f9fa;
