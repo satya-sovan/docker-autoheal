@@ -35,6 +35,41 @@ class MonitoringEngine:
         self._last_restart_times: dict[str, datetime] = {}
         self._backoff_delays: dict[str, int] = {}
 
+    def _get_stable_identifier(self, info: dict) -> str:
+        """
+        Get stable identifier for a container with priority fallback.
+
+        Priority:
+        1. monitoring.id label (explicit stable ID)
+        2. com.docker.compose.service + project (compose service name)
+        3. container name
+
+        This handles:
+        - Auto-generated names (uses compose service)
+        - Name conflicts (uses compose project + service)
+        - Explicit tracking (uses monitoring.id label)
+
+        Args:
+            info: Container information dict
+
+        Returns:
+            Stable identifier string
+        """
+        labels = info.get("labels", {})
+
+        # Priority 1: Explicit monitoring.id label
+        if "monitoring.id" in labels:
+            return labels["monitoring.id"]
+
+        # Priority 2: Docker Compose service name
+        compose_project = labels.get("com.docker.compose.project")
+        compose_service = labels.get("com.docker.compose.service")
+        if compose_project and compose_service:
+            return f"{compose_project}_{compose_service}"
+
+        # Priority 3: Container name (fallback)
+        return info.get("name")
+
     async def start(self) -> None:
         """Start the monitoring engine"""
         if self._running:
@@ -127,9 +162,14 @@ class MonitoringEngine:
         container_id = info.get("full_id")
         container_name = info.get("name")
 
-        # Check if container is quarantined
-        if config_manager.is_quarantined(container_id):
-            logger.debug(f"Container {container_name} is quarantined, skipping")
+        # Get stable identifier (handles auto-generated names, compose services, explicit IDs)
+        stable_id = self._get_stable_identifier(info)
+
+        # Check if container is quarantined (by stable ID, name, or ID for backwards compatibility)
+        if (config_manager.is_quarantined(stable_id) or
+            config_manager.is_quarantined(container_name) or
+            config_manager.is_quarantined(container_id)):
+            logger.debug(f"Container {container_name} (stable_id: {stable_id}) is quarantined, skipping")
             return
 
         # Check if container should be monitored
@@ -157,17 +197,25 @@ class MonitoringEngine:
         container_name = info.get("name")
         labels = info.get("labels", {})
 
-        # Check explicit exclusion (check both full ID, short ID, and name)
-        if (container_id in config.containers.excluded or
+        # Get stable identifier (handles all edge cases)
+        stable_id = self._get_stable_identifier(info)
+        compose_service = labels.get("com.docker.compose.service")
+
+        # Check explicit exclusion (check stable_id, compose service, name, and IDs)
+        if (stable_id in config.containers.excluded or
+            container_id in config.containers.excluded or
             short_id in config.containers.excluded or
-            container_name in config.containers.excluded):
+            container_name in config.containers.excluded or
+            (compose_service and compose_service in config.containers.excluded)):
             return False
 
-        # Check explicit inclusion (check both full ID, short ID, and name)
-        if (container_id in config.containers.selected or
+        # Check explicit inclusion (check stable_id, compose service, name, and IDs)
+        if (stable_id in config.containers.selected or
+            container_id in config.containers.selected or
             short_id in config.containers.selected or
-            container_name in config.containers.selected):
-            logger.debug(f"Container {container_name} ({short_id}) explicitly selected for monitoring")
+            container_name in config.containers.selected or
+            (compose_service and compose_service in config.containers.selected)):
+            logger.debug(f"Container {container_name} (stable_id: {stable_id}) explicitly selected for monitoring")
             return True
 
         # Check include_all flag
@@ -253,8 +301,16 @@ class MonitoringEngine:
 
         # Check health status
         if restart_mode in ["health", "both"]:
-            # First check custom health checks
-            custom_hc = config_manager.get_custom_health_check(container_id)
+            # Get stable identifier for health check lookup
+            container_name = info.get("name")
+            stable_id = self._get_stable_identifier(info)
+
+            # Check custom health checks (by stable_id, name, then ID for backwards compatibility)
+            custom_hc = config_manager.get_custom_health_check(stable_id)
+            if not custom_hc:
+                custom_hc = config_manager.get_custom_health_check(container_name)
+            if not custom_hc:
+                custom_hc = config_manager.get_custom_health_check(container_id)
             if custom_hc:
                 health_ok = await self._perform_custom_health_check(container, custom_hc)
                 if not health_ok:
@@ -328,28 +384,40 @@ class MonitoringEngine:
         container_id = info.get("full_id")
         container_name = info.get("name")
 
-        # Check cooldown
-        last_restart = self._last_restart_times.get(container_id)
+        # Get stable identifier (handles auto-generated names, compose services, explicit IDs)
+        stable_id = self._get_stable_identifier(info)
+        labels = info.get("labels", {})
+
+        # Use STABLE IDENTIFIER as primary (persists across container recreations)
+        # This solves:
+        # 1. Container ID bug (IDs change after image updates)
+        # 2. Auto-generated names (uses compose service name)
+        # 3. Name conflicts (uses compose project + service)
+
+        logger.debug(f"Using stable_id '{stable_id}' for container {container_name}")
+
+        # Check cooldown (using stable_id)
+        last_restart = self._last_restart_times.get(stable_id)
         if last_restart:
             elapsed = (datetime.now(timezone.utc) - last_restart).total_seconds()
             if elapsed < config.restart.cooldown_seconds:
-                logger.debug(f"Container {container_name} in cooldown period ({elapsed:.1f}s)")
+                logger.debug(f"Container {container_name} (stable_id: {stable_id}) in cooldown period ({elapsed:.1f}s)")
                 return
 
-        # Check restart threshold
+        # Check restart threshold (using stable_id for persistence)
         restart_count = config_manager.get_restart_count(
-            container_id,
+            stable_id,
             config.restart.max_restarts_window_seconds
         )
 
         if restart_count >= config.restart.max_restarts:
-            # Quarantine container
-            config_manager.quarantine_container(container_id)
+            # Quarantine container (by stable_id)
+            config_manager.quarantine_container(stable_id)
 
             event = AutoHealEvent(
                 timestamp=datetime.now(timezone.utc),
-                container_id=container_id,
-                container_name=container_name,
+                container_name=f"{container_name} ({stable_id})",
+                container_id=container_id,  # Store current ID for reference
                 event_type="quarantine",
                 restart_count=restart_count,
                 status="quarantined",
@@ -358,7 +426,7 @@ class MonitoringEngine:
             )
             config_manager.add_event(event)
 
-            logger.warning(f"Container {container_name} quarantined after {restart_count} restarts")
+            logger.warning(f"Container {container_name} (stable_id: {stable_id}) quarantined after {restart_count} restarts")
 
             # Send alert if configured
             if config.alerts.enabled and config.alerts.notify_on_quarantine:
@@ -366,29 +434,29 @@ class MonitoringEngine:
 
             return
 
-        # Apply backoff if enabled
+        # Apply backoff if enabled (using stable_id)
         if config.restart.backoff.enabled:
-            backoff_delay = self._backoff_delays.get(container_id, config.restart.backoff.initial_seconds)
-            logger.debug(f"Applying backoff delay of {backoff_delay}s for {container_name}")
+            backoff_delay = self._backoff_delays.get(stable_id, config.restart.backoff.initial_seconds)
+            logger.debug(f"Applying backoff delay of {backoff_delay}s for {container_name} (stable_id: {stable_id})")
             await asyncio.sleep(backoff_delay)
 
             # Update backoff for next time
             next_backoff = int(backoff_delay * config.restart.backoff.multiplier)
-            self._backoff_delays[container_id] = next_backoff
+            self._backoff_delays[stable_id] = next_backoff
 
         # Perform restart
-        logger.info(f"Restarting container {container_name} (reason: {reason})")
+        logger.info(f"Restarting container {container_name} (stable_id: {stable_id}, reason: {reason})")
         success = await asyncio.to_thread(self.docker_client.restart_container, container)
 
-        # Record restart
-        config_manager.record_restart(container_id)
-        self._last_restart_times[container_id] = datetime.now(timezone.utc)
+        # Record restart (using stable_id - persists across ID changes and handles all edge cases)
+        config_manager.record_restart(stable_id)
+        self._last_restart_times[stable_id] = datetime.now(timezone.utc)
 
         # Log event
         event = AutoHealEvent(
             timestamp=datetime.now(timezone.utc),
-            container_id=container_id,
-            container_name=container_name,
+            container_name=f"{container_name} ({stable_id})",
+            container_id=container_id,  # Store current ID for reference
             event_type="restart",
             restart_count=restart_count + 1,
             status="success" if success else "failure",
@@ -397,11 +465,11 @@ class MonitoringEngine:
         config_manager.add_event(event)
 
         if success:
-            logger.info(f"Successfully restarted container {container_name}")
+            logger.info(f"Successfully restarted container {container_name} (stable_id: {stable_id})")
             # Reset backoff on successful restart
-            self._backoff_delays[container_id] = config.restart.backoff.initial_seconds
+            self._backoff_delays[stable_id] = config.restart.backoff.initial_seconds
         else:
-            logger.error(f"Failed to restart container {container_name}")
+            logger.error(f"Failed to restart container {container_name} (stable_id: {stable_id})")
 
     async def _send_alert(self, event: AutoHealEvent) -> None:
         """
@@ -553,32 +621,49 @@ class MonitoringEngine:
             if labels.get("autoheal") == "true":
                 config = config_manager.get_config()
 
-                # Check if already in selected list
-                if container_id in config.containers.selected:
-                    logger.debug(f"Container {container_name} already in monitored list")
+                # Get stable identifier (handles auto-generated names, compose services)
+                compose_project = labels.get("com.docker.compose.project")
+                compose_service = labels.get("com.docker.compose.service")
+                monitoring_id = labels.get("monitoring.id")
+
+                # Determine best identifier
+                if monitoring_id:
+                    stable_id = monitoring_id
+                elif compose_project and compose_service:
+                    stable_id = f"{compose_project}_{compose_service}"
+                else:
+                    stable_id = container_name
+
+                # Check if already in selected list (by stable_id, name, or ID for backwards compatibility)
+                if (stable_id in config.containers.selected or
+                    container_name in config.containers.selected or
+                    container_id in config.containers.selected):
+                    logger.debug(f"Container {container_name} (stable_id: {stable_id}) already in monitored list")
                     return
 
-                # Check if in excluded list
-                if container_id in config.containers.excluded:
-                    logger.info(f"Container {container_name} has autoheal=true but is in excluded list, skipping")
+                # Check if in excluded list (by stable_id, name, or ID for backwards compatibility)
+                if (stable_id in config.containers.excluded or
+                    container_name in config.containers.excluded or
+                    container_id in config.containers.excluded):
+                    logger.info(f"Container {container_name} (stable_id: {stable_id}) has autoheal=true but is in excluded list, skipping")
                     return
 
-                # Add to monitored list
-                config.containers.selected.append(container_id)
+                # Add to monitored list using STABLE ID (solves all edge cases)
+                config.containers.selected.append(stable_id)
                 config_manager.update_config(config)
 
                 # Log the auto-monitoring
-                logger.info(f"Auto-monitoring enabled for container '{container_name}' ({container_id[:12]}) - detected autoheal=true label")
+                logger.info(f"Auto-monitoring enabled for container '{container_name}' ({container_id[:12]}) with stable_id '{stable_id}' - detected autoheal=true label")
 
                 # Create an event for this
                 event_obj = AutoHealEvent(
                     timestamp=datetime.now(timezone.utc),
-                    container_id=container_id,
-                    container_name=container_name,
+                    container_name=f"{container_name} ({stable_id})",
+                    container_id=container_id,  # Store current ID for reference
                     event_type="auto_monitor",
                     restart_count=0,
                     status="enabled",
-                    message=f"Automatically added to monitoring due to autoheal=true label"
+                    message=f"Automatically added to monitoring due to autoheal=true label (stable_id: {stable_id})"
                 )
                 config_manager.add_event(event_obj)
 

@@ -188,26 +188,40 @@ async def get_container_details(container_id: str):
 
         info = docker_client.get_container_info(container)
 
-        # Use full container ID for all operations
+        # Use container name as primary identifier (persists across recreations)
         full_container_id = info.get("full_id")
+        container_name = info.get("name")
 
-        # Get restart history
+        # Get restart history (by name first, then ID for backwards compatibility)
         restart_count = config_manager.get_restart_count(
-            full_container_id,
+            container_name,
             config_manager.get_config().restart.max_restarts_window_seconds
         )
+        if restart_count == 0:
+            restart_count = config_manager.get_restart_count(
+                full_container_id,
+                config_manager.get_config().restart.max_restarts_window_seconds
+            )
 
         # Check monitoring status
         monitored = False
         if monitoring_engine:
             monitored = monitoring_engine._should_monitor_container(container, info)
 
+        # Check if quarantined (by name first, then ID)
+        quarantined = config_manager.is_quarantined(container_name) or config_manager.is_quarantined(full_container_id)
+
+        # Get custom health check (by name first, then ID)
+        custom_hc = config_manager.get_custom_health_check(container_name)
+        if not custom_hc:
+            custom_hc = config_manager.get_custom_health_check(full_container_id)
+
         return {
             **info,
             "monitored": monitored,
-            "quarantined": config_manager.is_quarantined(full_container_id),
+            "quarantined": quarantined,
             "recent_restart_count": restart_count,
-            "custom_health_check": config_manager.get_custom_health_check(full_container_id)
+            "custom_health_check": custom_hc
         }
     except HTTPException:
         raise
@@ -224,25 +238,83 @@ async def update_container_selection(request: ContainerSelectionRequest):
         config = config_manager.get_config()
 
         if request.enabled:
-            # Add to selected list
+            # Add to selected list - resolve stable identifiers for persistence
             for cid in request.container_ids:
-                if cid not in config.containers.selected:
-                    config.containers.selected.append(cid)
-                    logger.debug(f"Added container {cid} to selected list")
-                # Remove from excluded if present
-                if cid in config.containers.excluded:
-                    config.containers.excluded.remove(cid)
-                    logger.debug(f"Removed container {cid} from excluded list")
+                # Try to get container to resolve its stable identifier
+                container = docker_client.get_container(cid)
+                if container:
+                    info = docker_client.get_container_info(container)
+                    container_name = info.get("name")
+
+                    # Get stable identifier (handles all edge cases)
+                    labels = info.get("labels", {})
+                    monitoring_id = labels.get("monitoring.id")
+                    compose_project = labels.get("com.docker.compose.project")
+                    compose_service = labels.get("com.docker.compose.service")
+
+                    if monitoring_id:
+                        stable_id = monitoring_id
+                    elif compose_project and compose_service:
+                        stable_id = f"{compose_project}_{compose_service}"
+                    else:
+                        stable_id = container_name
+
+                    # Store by stable_id for persistence across recreations
+                    if stable_id not in config.containers.selected:
+                        config.containers.selected.append(stable_id)
+                        logger.debug(f"Added container '{container_name}' with stable_id '{stable_id}' to selected list (ID: {cid})")
+
+                    # Remove from excluded if present (check stable_id, name, and ID)
+                    for identifier in [stable_id, container_name, cid]:
+                        if identifier in config.containers.excluded:
+                            config.containers.excluded.remove(identifier)
+                            logger.debug(f"Removed '{identifier}' from excluded list")
+                else:
+                    # Fallback: store the identifier as-is
+                    if cid not in config.containers.selected:
+                        config.containers.selected.append(cid)
+                        logger.debug(f"Added container {cid} to selected list (container not resolved)")
+                    if cid in config.containers.excluded:
+                        config.containers.excluded.remove(cid)
         else:
-            # Add to excluded list
+            # Add to excluded list - resolve stable identifiers for persistence
             for cid in request.container_ids:
-                if cid not in config.containers.excluded:
-                    config.containers.excluded.append(cid)
-                    logger.debug(f"Added container {cid} to excluded list")
-                # Remove from selected if present
-                if cid in config.containers.selected:
-                    config.containers.selected.remove(cid)
-                    logger.debug(f"Removed container {cid} from selected list")
+                # Try to get container to resolve its stable identifier
+                container = docker_client.get_container(cid)
+                if container:
+                    info = docker_client.get_container_info(container)
+                    container_name = info.get("name")
+
+                    # Get stable identifier
+                    labels = info.get("labels", {})
+                    monitoring_id = labels.get("monitoring.id")
+                    compose_project = labels.get("com.docker.compose.project")
+                    compose_service = labels.get("com.docker.compose.service")
+
+                    if monitoring_id:
+                        stable_id = monitoring_id
+                    elif compose_project and compose_service:
+                        stable_id = f"{compose_project}_{compose_service}"
+                    else:
+                        stable_id = container_name
+
+                    # Store by stable_id for persistence across recreations
+                    if stable_id not in config.containers.excluded:
+                        config.containers.excluded.append(stable_id)
+                        logger.debug(f"Added container '{container_name}' with stable_id '{stable_id}' to excluded list (ID: {cid})")
+
+                    # Remove from selected if present (check stable_id, name, and ID)
+                    for identifier in [stable_id, container_name, cid]:
+                        if identifier in config.containers.selected:
+                            config.containers.selected.remove(identifier)
+                            logger.debug(f"Removed '{identifier}' from selected list")
+                else:
+                    # Fallback: store the identifier as-is
+                    if cid not in config.containers.excluded:
+                        config.containers.excluded.append(cid)
+                        logger.debug(f"Added container {cid} to excluded list (container not resolved)")
+                    if cid in config.containers.selected:
+                        config.containers.selected.remove(cid)
 
         config_manager.update_config(config)
 
@@ -285,18 +357,24 @@ async def unquarantine_container(container_id: str):
         if not docker_client:
             raise HTTPException(status_code=500, detail="Docker client not initialized")
 
-        # Get the container to resolve full container ID
+        # Get the container to resolve name
         container = docker_client.get_container(container_id)
         if not container:
             raise HTTPException(status_code=404, detail="Container not found")
 
-        # Use the full container ID for quarantine operations
+        # Use the container name for quarantine operations (persists across recreations)
+        container_name = container.name
         full_container_id = container.id
 
+        # Remove from quarantine by name (primary) and also by ID (backwards compatibility)
+        config_manager.unquarantine_container(container_name)
         config_manager.unquarantine_container(full_container_id)
+
+        # Clear restart history by name
+        config_manager.clear_restart_history(container_name)
         config_manager.clear_restart_history(full_container_id)
 
-        return {"status": "success", "message": f"Container {container_id} removed from quarantine"}
+        return {"status": "success", "message": f"Container {container_name} removed from quarantine"}
     except HTTPException:
         raise
     except Exception as e:

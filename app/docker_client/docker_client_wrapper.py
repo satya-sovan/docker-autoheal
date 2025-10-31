@@ -102,14 +102,29 @@ class DockerClientWrapper:
             attrs = container.attrs
 
             # Extract relevant information
+            labels = attrs.get("Config", {}).get("Labels", {})
+
+            # Get stable identifier (priority: monitoring.id label > container name)
+            stable_id = labels.get("monitoring.id") or labels.get("com.docker.compose.service") or container.name
+
+            # Get image info for tracking
+            image_name = container.image.tags[0] if container.image.tags else container.image.id
+            image_id = attrs.get("Image", "")
+
+            # Get network info for uniqueness
+            networks = list(attrs.get("NetworkSettings", {}).get("Networks", {}).keys())
+
             info = {
                 "id": container.id[:12],  # Short ID
                 "full_id": container.id,
                 "name": container.name,
-                "image": container.image.tags[0] if container.image.tags else container.image.id,
+                "stable_id": stable_id,  # NEW: Stable identifier for tracking
+                "image": image_name,
+                "image_id": image_id,  # NEW: For version tracking
                 "status": container.status,
                 "state": attrs.get("State", {}),
-                "labels": attrs.get("Config", {}).get("Labels", {}),
+                "labels": labels,
+                "networks": networks,  # NEW: For handling name conflicts
                 "created": attrs.get("Created"),
                 "started_at": attrs.get("State", {}).get("StartedAt"),
                 "finished_at": attrs.get("State", {}).get("FinishedAt"),
@@ -117,6 +132,8 @@ class DockerClientWrapper:
                 "restart_count": attrs.get("RestartCount", 0),
                 "health": self._get_health_status(attrs),
                 "restart_policy": attrs.get("HostConfig", {}).get("RestartPolicy", {}),
+                "compose_project": labels.get("com.docker.compose.project"),  # NEW: Compose project
+                "compose_service": labels.get("com.docker.compose.service"),  # NEW: Compose service
             }
 
             return info
