@@ -54,8 +54,23 @@ function App() {
 
   useEffect(() => {
     fetchSystemStatus();
-    const interval = setInterval(fetchSystemStatus, 5000); // Refresh every 5s
-    return () => clearInterval(interval);
+
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(fetchSystemStatus, 5000);
+
+    // Handle visibility change to refresh immediately when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchSystemStatus();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   return (

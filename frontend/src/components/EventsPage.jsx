@@ -45,8 +45,23 @@ function EventsPage() {
 
   useEffect(() => {
     fetchEvents();
+
+    // Auto-refresh every 5 seconds
     const interval = setInterval(fetchEvents, 5000);
-    return () => clearInterval(interval);
+
+    // Handle visibility change to refresh immediately when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchEvents();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const getEventVariant = (status) => {

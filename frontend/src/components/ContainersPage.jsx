@@ -30,8 +30,23 @@ function ContainersPage() {
 
   useEffect(() => {
     fetchContainers();
-    const interval = setInterval(fetchContainers, 30000);
-    return () => clearInterval(interval);
+
+    // Auto-refresh every 5 seconds (matching EventsPage and Dashboard)
+    const interval = setInterval(fetchContainers, 5000);
+
+    // Handle visibility change to pause/resume polling
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchContainers(); // Refresh immediately when tab becomes visible
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const showAlert = (variant, message) => {
