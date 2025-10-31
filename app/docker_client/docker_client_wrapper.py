@@ -104,8 +104,19 @@ class DockerClientWrapper:
             # Extract relevant information
             labels = attrs.get("Config", {}).get("Labels", {})
 
-            # Get stable identifier (priority: monitoring.id label > container name)
-            stable_id = labels.get("monitoring.id") or labels.get("com.docker.compose.service") or container.name
+            # Get stable identifier with same logic as monitoring_engine
+            # Priority 1: Explicit monitoring.id label
+            if "monitoring.id" in labels:
+                stable_id = labels["monitoring.id"]
+            else:
+                # Priority 2: Docker Compose service name (project_service format)
+                compose_project = labels.get("com.docker.compose.project")
+                compose_service = labels.get("com.docker.compose.service")
+                if compose_project and compose_service:
+                    stable_id = f"{compose_project}_{compose_service}"
+                else:
+                    # Priority 3: Container name (fallback)
+                    stable_id = container.name
 
             # Get image info for tracking
             image_name = container.image.tags[0] if container.image.tags else container.image.id

@@ -391,23 +391,10 @@ class ConfigManager:
             return self._config.containers.restart_counts.get(container_id, 0)
 
     def cleanup_restart_counts(self, active_container_ids: List[str]) -> None:
-        """Remove restart counts for containers that no longer exist"""
-        with self._lock:
-            # Get current restart counts
-            current_counts = self._config.containers.restart_counts.copy()
-
-            # Keep only counts for active containers
-            cleaned_counts = {
-                cid: count for cid, count in current_counts.items()
-                if cid in active_container_ids
-            }
-
-            # Update if anything was removed
-            if len(cleaned_counts) < len(current_counts):
-                self._config.containers.restart_counts = cleaned_counts
-                self._save_config()
-                removed_count = len(current_counts) - len(cleaned_counts)
-                logger.info(f"Cleaned up restart counts for {removed_count} removed containers")
+        """Remove restart counts for containers that no longer exist (DISABLED to preserve manual entries)"""
+        # DISABLED: Auto-cleanup was removing manual entries because stable_id matching is complex
+        # Users can manually edit config.json to remove old entries if needed
+        pass
 
     def quarantine_container(self, container_id: str) -> None:
         """Mark container as quarantined"""

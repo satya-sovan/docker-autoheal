@@ -153,8 +153,8 @@ async def list_containers(include_stopped: bool = False):
             if monitoring_engine:
                 monitored = monitoring_engine._should_monitor_container(container, info)
 
-            # Check if quarantined
-            quarantined = config_manager.is_quarantined(container_id)
+            # Check if quarantined (use stable_id, matching how quarantine is stored)
+            quarantined = config_manager.is_quarantined(stable_id)
 
             # Get locally tracked restart count (persists across container recreations)
             locally_tracked_restarts = config_manager.get_total_restart_count(stable_id)
@@ -209,8 +209,8 @@ async def get_container_details(container_id: str):
         if monitoring_engine:
             monitored = monitoring_engine._should_monitor_container(container, info)
 
-        # Check if quarantined (by name first, then ID)
-        quarantined = config_manager.is_quarantined(container_name) or config_manager.is_quarantined(full_container_id)
+        # Check if quarantined (use stable_id, matching how quarantine is stored)
+        quarantined = config_manager.is_quarantined(stable_id)
 
         # Get custom health check (by name first, then ID)
         custom_hc = config_manager.get_custom_health_check(container_name)
@@ -362,22 +362,20 @@ async def unquarantine_container(container_id: str):
         if not docker_client:
             raise HTTPException(status_code=500, detail="Docker client not initialized")
 
-        # Get the container to resolve name
+        # Get the container to resolve stable_id
         container = docker_client.get_container(container_id)
         if not container:
             raise HTTPException(status_code=404, detail="Container not found")
 
-        # Use the container name for quarantine operations (persists across recreations)
-        container_name = container.name
-        full_container_id = container.id
+        info = docker_client.get_container_info(container)
+        container_name = info.get("name")
+        stable_id = info.get("stable_id")
 
-        # Remove from quarantine by name (primary) and also by ID (backwards compatibility)
-        config_manager.unquarantine_container(container_name)
-        config_manager.unquarantine_container(full_container_id)
+        # Remove from quarantine using stable_id (matches how quarantine is stored)
+        config_manager.unquarantine_container(stable_id)
 
-        # Clear restart history by name
-        config_manager.clear_restart_history(container_name)
-        config_manager.clear_restart_history(full_container_id)
+        # Clear restart history using stable_id
+        config_manager.clear_restart_history(stable_id)
 
         return {"status": "success", "message": f"Container {container_name} removed from quarantine"}
     except HTTPException:
