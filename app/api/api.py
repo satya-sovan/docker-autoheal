@@ -70,6 +70,8 @@ class ContainerInfo(BaseModel):
     restart_count: int
     monitored: bool
     quarantined: bool
+    uptime_kuma_status: Optional[int] = None  # 0=down, 1=up, 2=pending, 3=maintenance, None=not mapped/disabled
+    uptime_kuma_monitor_name: Optional[str] = None
 
 
 class SystemStatus(BaseModel):
@@ -109,7 +111,7 @@ async def get_system_status():
         for container in containers:
             info = docker_client.get_container_info(container)
             if monitoring_engine and info:
-                if monitoring_engine._should_monitor_container(container, info):
+                if monitoring_engine.should_monitor_container(container, info):
                     monitored_count += 1
 
         maintenance_start = config_manager.get_maintenance_start_time()
@@ -139,6 +141,15 @@ async def list_containers(include_stopped: bool = False):
 
         containers = docker_client.list_containers(all_containers=include_stopped)
         result = []
+        
+        # Get Uptime Kuma configuration
+        config = config_manager.get_config()
+        uptime_kuma_enabled = config.uptime_kuma.enabled
+
+        # Use the uptime_kuma_monitor from monitoring_engine if available
+        uptime_kuma_monitor = None
+        if uptime_kuma_enabled and monitoring_engine and hasattr(monitoring_engine, 'uptime_kuma_monitor'):
+            uptime_kuma_monitor = monitoring_engine.uptime_kuma_monitor
 
         for container in containers:
             info = docker_client.get_container_info(container)
@@ -151,13 +162,35 @@ async def list_containers(include_stopped: bool = False):
             # Check if monitored
             monitored = False
             if monitoring_engine:
-                monitored = monitoring_engine._should_monitor_container(container, info)
+                monitored = monitoring_engine.should_monitor_container(container, info)
 
             # Check if quarantined (use stable_id, matching how quarantine is stored)
             quarantined = config_manager.is_quarantined(stable_id)
 
             # Get locally tracked restart count (persists across container recreations)
             locally_tracked_restarts = config_manager.get_total_restart_count(stable_id)
+            
+            # Check for Uptime Kuma mapping and status using uptime_kuma_monitor
+            uptime_kuma_status = None
+            uptime_kuma_monitor_name = None
+            
+            if uptime_kuma_enabled and uptime_kuma_monitor:
+                # Check if container is mapped
+                if uptime_kuma_monitor.is_container_mapped(stable_id):
+                    # Get the monitor name from mappings
+                    for mapping in config.uptime_kuma_mappings:
+                        if mapping.container_id == stable_id:
+                            uptime_kuma_monitor_name = mapping.monitor_friendly_name
+                            break
+
+                    # Get cached status from uptime_kuma_monitor
+                    uptime_kuma_status = uptime_kuma_monitor.get_container_status(stable_id)
+            elif uptime_kuma_enabled and not uptime_kuma_monitor:
+                # Uptime-Kuma integration enabled but monitor not initialized
+                uptime_kuma_status = 4  # Indicate unknown status
+            elif not uptime_kuma_enabled:
+                uptime_kuma_status = 5  # Integration disabled
+
 
             container_info = ContainerInfo(
                 id=info.get("id"),
@@ -169,7 +202,9 @@ async def list_containers(include_stopped: bool = False):
                 health=info.get("health"),
                 restart_count=locally_tracked_restarts,  # Use locally tracked count instead of Docker's
                 monitored=monitored,
-                quarantined=quarantined
+                quarantined=quarantined,
+                uptime_kuma_status=uptime_kuma_status,
+                uptime_kuma_monitor_name=uptime_kuma_monitor_name
             )
             result.append(container_info)
 
@@ -207,7 +242,7 @@ async def get_container_details(container_id: str):
         # Check monitoring status
         monitored = False
         if monitoring_engine:
-            monitored = monitoring_engine._should_monitor_container(container, info)
+            monitored = monitoring_engine.should_monitor_container(container, info)
 
         # Check if quarantined (use stable_id, matching how quarantine is stored)
         quarantined = config_manager.is_quarantined(stable_id)

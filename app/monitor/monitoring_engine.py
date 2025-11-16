@@ -35,7 +35,7 @@ class MonitoringEngine:
         self._last_restart_times: dict[str, datetime] = {}
         self._backoff_delays: dict[str, int] = {}
 
-    def _get_stable_identifier(self, info: dict) -> str:
+    def get_stable_identifier(self, info: dict) -> str:
         """
         Get stable identifier for a container with priority fallback.
 
@@ -145,7 +145,7 @@ class MonitoringEngine:
                 try:
                     info = self.docker_client.get_container_info(container)
                     if info:
-                        stable_id = self._get_stable_identifier(info)
+                        stable_id = self.get_stable_identifier(info)
                         active_stable_ids.append(stable_id)
                 except Exception as e:
                     logger.debug(f"Error getting container info for cleanup: {e}")
@@ -181,7 +181,7 @@ class MonitoringEngine:
         container_name = info.get("name")
 
         # Get stable identifier (handles auto-generated names, compose services, explicit IDs)
-        stable_id = self._get_stable_identifier(info)
+        stable_id = self.get_stable_identifier(info)
 
         # Check if container is quarantined (by stable ID, name, or ID for backwards compatibility)
         if (config_manager.is_quarantined(stable_id) or
@@ -191,7 +191,7 @@ class MonitoringEngine:
             return
 
         # Check if container should be monitored
-        if not self._should_monitor_container(container, info):
+        if not self.should_monitor_container(container, info):
             return
 
         # Check if container needs healing
@@ -200,7 +200,7 @@ class MonitoringEngine:
         if needs_restart:
             await self._handle_container_restart(container, info, reason)
 
-    def _should_monitor_container(self, container: Container, info: dict) -> bool:
+    def should_monitor_container(self, container: Container, info: dict) -> bool:
         """
         Determine if container should be monitored for auto-healing
         Args:
@@ -216,7 +216,7 @@ class MonitoringEngine:
         labels = info.get("labels", {})
 
         # Get stable identifier (handles all edge cases)
-        stable_id = self._get_stable_identifier(info)
+        stable_id = self.get_stable_identifier(info)
         compose_service = labels.get("com.docker.compose.service")
 
         # Check explicit exclusion (check stable_id, compose service, name, and IDs)
@@ -296,6 +296,10 @@ class MonitoringEngine:
         restart_mode = config.restart.mode
         container_id = info.get("full_id")
 
+        # Get stable identifier for all checks
+        stable_id = self.get_stable_identifier(info)
+
+
         # Check exit status (for exited/stopped containers)
         state = info.get("state", {})
         status = state.get("Status", "").lower()
@@ -321,7 +325,6 @@ class MonitoringEngine:
         if restart_mode in ["health", "both"]:
             # Get stable identifier for health check lookup
             container_name = info.get("name")
-            stable_id = self._get_stable_identifier(info)
 
             # Check custom health checks (by stable_id, name, then ID for backwards compatibility)
             custom_hc = config_manager.get_custom_health_check(stable_id)
@@ -340,6 +343,11 @@ class MonitoringEngine:
                 status = health.get("status")
                 if status == "unhealthy":
                     return True, "Docker health check reports unhealthy"
+
+        # Check Uptime-Kuma monitor status (if configured and enabled)
+        if hasattr(self, 'uptime_kuma_monitor') and self.uptime_kuma_monitor:
+            if self.uptime_kuma_monitor.should_restart_from_uptime_kuma(stable_id):
+                return True, "Uptime-Kuma monitor reports DOWN"
 
         return False, ""
 
@@ -403,7 +411,7 @@ class MonitoringEngine:
         container_name = info.get("name")
 
         # Get stable identifier (handles auto-generated names, compose services, explicit IDs)
-        stable_id = self._get_stable_identifier(info)
+        stable_id = self.get_stable_identifier(info)
         labels = info.get("labels", {})
 
         # Use STABLE IDENTIFIER as primary (persists across container recreations)

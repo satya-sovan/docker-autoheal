@@ -111,7 +111,7 @@ def test_container_recreation_monitoring():
         mock_container.id = container_id
 
         # Should be monitored by name
-        should_monitor = self.monitoring_engine._should_monitor_container(
+        should_monitor = self.monitoring_engine.should_monitor_container(
             mock_container, mock_info
         )
         self.assertTrue(should_monitor, "Container should be monitored by name")
@@ -123,7 +123,7 @@ def test_container_recreation_monitoring():
         mock_container.id = new_id
 
         # Should still be monitored (same name, different ID)
-        should_monitor = self.monitoring_engine._should_monitor_container(
+        should_monitor = self.monitoring_engine.should_monitor_container(
             mock_container, mock_info
         )
         self.assertTrue(
@@ -155,7 +155,7 @@ def test_container_recreation_monitoring():
         mock_container.id = container_id
 
         # Should be monitored by ID (backwards compatibility)
-        should_monitor = self.monitoring_engine._should_monitor_container(
+        should_monitor = self.monitoring_engine.should_monitor_container(
             mock_container, mock_info
         )
         self.assertTrue(should_monitor, "Container should be monitored by ID (backwards compat)")
@@ -225,7 +225,7 @@ def test_container_recreation_monitoring():
         mock_container.id = container_id
 
         # Should NOT be monitored (explicitly excluded by name)
-        should_monitor = self.monitoring_engine._should_monitor_container(
+        should_monitor = self.monitoring_engine.should_monitor_container(
             mock_container, mock_info
         )
         self.assertFalse(should_monitor, "Container should be excluded by name")
@@ -312,7 +312,7 @@ class TestContainerRecreationScenario(unittest.TestCase):
         mock_container.name = container_name
         mock_container.id = new_id
 
-        should_monitor = self.monitoring_engine._should_monitor_container(
+        should_monitor = self.monitoring_engine.should_monitor_container(
             mock_container, mock_info
         )
         self.assertTrue(

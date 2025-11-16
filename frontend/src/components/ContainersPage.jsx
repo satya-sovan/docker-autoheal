@@ -172,6 +172,41 @@ function ContainersPage() {
     return <Badge bg={variants[health.status] || 'secondary'}>{health.status}</Badge>;
   };
 
+  const getUptimeKumaStatusBadge = (container) => {
+    // Status codes: 0=down, 1=up, 2=pending, 3=maintenance
+    const statusConfig = {
+      0: { variant: 'danger', icon: 'bi-x-circle-fill', text: 'Down' },
+      1: { variant: 'success', icon: 'bi-check-circle-fill', text: 'Up' },
+      2: { variant: 'warning', icon: 'bi-clock-fill', text: 'Pending' },
+      3: { variant: 'info', icon: 'bi-tools', text: 'Maintenance' },
+      4: { variant: 'secondary', icon: 'bi-link-45deg', text: 'Not Mapped' },
+      5: { variant: 'dark', icon: 'bi-slash-circle', text: 'Disabled' },
+      6: { variant: 'secondary', icon: 'bi-question-circle', text: 'Unknown' }
+    };
+
+    var config = statusConfig[container.uptime_kuma_status] || {
+      variant: 'secondary',
+      icon: 'bi-question-circle',
+      text: 'Unknown'
+    };
+
+    // If uptime kuma status is null or undefined, check if it's because it's not enabled or not mapped
+    if (container.uptime_kuma_status === null || container.uptime_kuma_status === undefined) {
+      if (!container.uptime_kuma_monitor_name) {
+          config = statusConfig[4]; // Not Mapped
+      } else if (container.uptime_kuma_monitor_name !== null) {
+        // Mapped but status unavailable
+        config = statusConfig[6];  // unavailable
+      }
+    }
+
+    return (
+      <Badge bg={config.variant} title={container.uptime_kuma_monitor_name || ''}>
+        {config.text}
+      </Badge>
+    );
+  };
+
   if (loading) {
     return (
       <div className="text-center py-5">
@@ -238,6 +273,7 @@ function ContainersPage() {
                 <th>Image</th>
                 <th>Status</th>
                 <th>Health</th>
+                <th>Kuma Status</th>
                 <th>Monitored</th>
                 <th>Restarts</th>
                 <th>Actions</th>
@@ -246,7 +282,7 @@ function ContainersPage() {
             <tbody>
               {containers.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-4 text-muted">
+                  <td colSpan="10" className="text-center py-4 text-muted">
                     No containers found
                   </td>
                 </tr>
@@ -269,6 +305,7 @@ function ContainersPage() {
                     <td className="small">{container.image}</td>
                     <td>{getStatusBadge(container.status)}</td>
                     <td>{getHealthBadge(container.health)}</td>
+                    <td>{getUptimeKumaStatusBadge(container)}</td>
                     <td>
                       {container.monitored && (
                         <Badge bg="info">Yes</Badge>

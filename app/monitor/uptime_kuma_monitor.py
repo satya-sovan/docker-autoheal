@@ -1,27 +1,37 @@
 """
-Uptime-Kuma monitoring service that triggers container restarts
+Uptime-Kuma monitoring service that provides container health status from Uptime Kuma
+This module only handles Uptime Kuma-specific operations (SOLID principles):
+- Uptime Kuma API communication
+- Monitor status retrieval
+- Mapping configuration
+- Providing health status to monitoring engine
+
+Core functionality (restarts, quarantine, events, etc.) is delegated to MonitoringEngine
 """
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Dict
 
-from app.config.config_manager import config_manager, AutoHealEvent
-from app.docker_client.docker_client_wrapper import DockerClientWrapper
+from app.config.config_manager import config_manager
 from app.uptime_kuma.uptime_kuma_client import UptimeKumaClient
 
 logger = logging.getLogger(__name__)
 
 
 class UptimeKumaMonitor:
-    """Monitor Uptime-Kuma statuses and trigger container restarts"""
+    """
+    Uptime-Kuma integration service
+    Provides container health status from Uptime Kuma monitors
+    Does NOT perform core actions - only reports status to MonitoringEngine
+    """
 
-    def __init__(self, docker_client: DockerClientWrapper):
-        self.docker_client = docker_client
+    def __init__(self):
+        """Initialize Uptime-Kuma monitor"""
         self.client: Optional[UptimeKumaClient] = None
         self._running = False
         self._task: Optional[asyncio.Task] = None
-        self._monitor_cache = {}  # Cache monitor IDs by friendly name
+        self._monitor_cache: Dict[str, dict] = {}  # Cache monitor IDs by friendly name
+        self._container_status_cache: Dict[str, int] = {}  # Cache of stable_id -> status
 
     async def start(self):
         """Start Uptime-Kuma monitoring"""
@@ -82,12 +92,12 @@ class UptimeKumaMonitor:
         logger.info(f"Cached {len(self._monitor_cache)} Uptime-Kuma monitors")
 
     async def _monitoring_loop(self):
-        """Main monitoring loop - check Uptime-Kuma statuses"""
+        """Main monitoring loop - check Uptime-Kuma statuses and cache them"""
         config = config_manager.get_config()
 
         while self._running:
             try:
-                await self._check_all_mappings()
+                await self._update_status_cache()
                 # Use monitor.interval_seconds for consistency with container monitoring
                 interval = config.monitor.interval_seconds
                 await asyncio.sleep(interval)
@@ -99,8 +109,8 @@ class UptimeKumaMonitor:
                 interval = config.monitor.interval_seconds
                 await asyncio.sleep(interval)
 
-    async def _check_all_mappings(self):
-        """Check all configured mappings and restart containers if needed"""
+    async def _update_status_cache(self):
+        """Update cache of container health statuses from Uptime-Kuma monitors"""
         config = config_manager.get_config()
 
         if not config.uptime_kuma_mappings:
@@ -112,114 +122,42 @@ class UptimeKumaMonitor:
                 status = await self.client.get_monitor_status_by_name(mapping.monitor_friendly_name)
 
                 if status is None:
-                    logger.warning(f"Monitor '{mapping.monitor_friendly_name}' not found or could not fetch status")
+                    logger.debug(f"Monitor '{mapping.monitor_friendly_name}' not found or could not fetch status")
                     continue
 
-                # Status: 0=down, 1=up, 2=pending, 3=maintenance
-                if status == 0 and config.uptime_kuma.auto_restart_on_down:
-                    # mapping.container_id now stores stable_id
-                    await self._handle_monitor_down(mapping.container_id, mapping.monitor_friendly_name)
+                # Cache the status (0=down, 1=up, 2=pending, 3=maintenance)
+                # mapping.container_id now stores stable_id
+                self._container_status_cache[mapping.container_id] = status
+
+                logger.debug(f"Cached status for {mapping.container_id}: {status} (monitor: {mapping.monitor_friendly_name})")
 
             except Exception as e:
-                logger.error(f"Error checking mapping {mapping.container_id}: {e}")
+                logger.error(f"Error fetching status for mapping {mapping.container_id}: {e}")
 
-    async def _handle_monitor_down(self, stable_id: str, monitor_name: str):
-        """Handle a DOWN status from Uptime-Kuma by restarting the container"""
-        try:
-            # Check if container is quarantined
-            if config_manager.is_quarantined(stable_id):
-                logger.info(f"Container {stable_id} is quarantined, skipping restart")
-                return
-            
-            # Check maintenance mode
-            if config_manager.is_maintenance_mode():
-                logger.info("Maintenance mode active, skipping restart")
-                return
-            
-            # Find container by stable_id
-            containers = self.docker_client.list_containers(all_containers=False)
-            container = None
-            
-            for c in containers:
-                info = self.docker_client.get_container_info(c)
-                if info and info.get("stable_id") == stable_id:
-                    container = c
-                    break
-            
-            if not container:
-                logger.warning(f"Container with stable_id {stable_id} not found")
-                return
+    def get_container_status(self, stable_id: str) -> Optional[int]:
+        return self._container_status_cache.get(stable_id)
 
-            # Get container info to check if it should be monitored
-            info = self.docker_client.get_container_info(container)
-            if not info:
-                logger.warning(f"Could not get info for container {stable_id}")
-                return
+    def is_container_mapped(self, stable_id: str) -> bool:
+        config = config_manager.get_config()
+        if not config.uptime_kuma_mappings:
+            return False
 
-            # Check if container is selected for monitoring
-            config = config_manager.get_config()
-            container_name = info.get("name")
-            container_id = info.get("full_id")
-            short_id = info.get("id")
-            labels = info.get("labels", {})
-            compose_service = labels.get("com.docker.compose.service")
+        return any(mapping.container_id == stable_id for mapping in config.uptime_kuma_mappings)
 
-            # Check if container should be monitored (same logic as monitoring_engine)
-            is_selected = (
-                stable_id in config.containers.selected or
-                container_id in config.containers.selected or
-                short_id in config.containers.selected or
-                container_name in config.containers.selected or
-                (compose_service and compose_service in config.containers.selected)
-            )
+    def should_restart_from_uptime_kuma(self, stable_id: str) -> bool:
+        config = config_manager.get_config()
 
-            # If not explicitly selected, check if it would be monitored by label
-            if not is_selected:
-                if config.monitor.include_all:
-                    is_selected = True
-                else:
-                    label_key = config.monitor.label_key
-                    label_value = config.monitor.label_value
-                    is_selected = (label_key in labels and labels[label_key] == label_value)
+        # Check if auto-restart on down is enabled
+        if not config.uptime_kuma.auto_restart_on_down:
+            return False
 
-            if not is_selected:
-                logger.info(f"Container {container_name} (stable_id: {stable_id}) is not selected for monitoring, skipping Uptime-Kuma restart")
-                return
+        # Check if container is mapped
+        if not self.is_container_mapped(stable_id):
+            return False
 
-            logger.warning(f"Uptime-Kuma monitor '{monitor_name}' is DOWN - restarting container {container.name}")
+        # Check monitor status
+        status = self.get_container_status(stable_id)
 
-            # Restart the container
-            container.restart(timeout=10)
-
-            # Record the restart using stable_id
-            config_manager.record_restart(stable_id)
-
-            # Log event
-            event = AutoHealEvent(
-                timestamp=datetime.now(timezone.utc),
-                container_id=container.id[:12],
-                container_name=container.name,
-                event_type="uptime_kuma_restart",
-                restart_count=config_manager.get_total_restart_count(stable_id),
-                status="success",
-                message=f"Restarted due to Uptime-Kuma monitor '{monitor_name}' DOWN status"
-            )
-            config_manager.add_event(event)
-
-            logger.info(f"Successfully restarted {container.name} via Uptime-Kuma trigger")
-
-        except Exception as e:
-            logger.error(f"Failed to restart container {stable_id}: {e}")
-
-            # Log failure event
-            event = AutoHealEvent(
-                timestamp=datetime.now(timezone.utc),
-                container_id=stable_id,
-                container_name=stable_id,
-                event_type="uptime_kuma_restart",
-                restart_count=config_manager.get_total_restart_count(stable_id),
-                status="failure",
-                message=f"Failed to restart: {str(e)}"
-            )
-            config_manager.add_event(event)
+        # Status 0 = down
+        return status == 0
 

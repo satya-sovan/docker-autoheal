@@ -102,9 +102,9 @@ class AutoHealService:
             logger.info("Initializing monitoring engine...")
             self.monitoring_engine = MonitoringEngine(self.docker_client)
 
-            # Initialize Uptime-Kuma monitor
+            # Initialize Uptime-Kuma monitor (independent service that provides status)
             logger.info("Initializing Uptime-Kuma monitor...")
-            self.uptime_kuma_monitor = UptimeKumaMonitor(self.docker_client)
+            self.uptime_kuma_monitor = UptimeKumaMonitor()
 
             # Attach to monitoring engine for API access
             self.monitoring_engine.uptime_kuma_monitor = self.uptime_kuma_monitor
