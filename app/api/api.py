@@ -781,7 +781,7 @@ async def enable_uptime_kuma_integration(integration_config: dict):
 
             # Check if any monitor friendly name matches container name
             for monitor in monitors:
-                if monitor['friendly_name'] == container_name:
+                if monitor['friendly_name'].lower() == container_name.lower():
                     mapping = UptimeKumaMapping(
                         container_id=stable_id,  # Use stable_id instead of short container ID
                         monitor_friendly_name=monitor['friendly_name'],
