@@ -91,7 +91,7 @@ class UptimeKumaConfig(BaseModel):
 
 class UptimeKumaMapping(BaseModel):
     """Container to Uptime-Kuma monitor mapping"""
-    container_id: str = Field(description="Container stable ID or name")
+    container_id: str = Field(description="Container stable ID (stable across recreations)")
     monitor_friendly_name: str = Field(description="Uptime-Kuma monitor friendly name")
     auto_mapped: bool = Field(default=False, description="Whether this was auto-mapped")
 

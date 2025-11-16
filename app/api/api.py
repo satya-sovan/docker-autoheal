@@ -735,11 +735,20 @@ async def enable_uptime_kuma_integration(integration_config: dict):
 
         for container in containers:
             container_name = container.name
+            # Get container info to extract stable_id
+            info = docker_client.get_container_info(container)
+            if not info:
+                continue
+
+            stable_id = info.get("stable_id")
+            if not stable_id:
+                continue
+
             # Check if any monitor friendly name matches container name
             for monitor in monitors:
                 if monitor['friendly_name'] == container_name:
                     mapping = UptimeKumaMapping(
-                        container_id=container.id[:12],
+                        container_id=stable_id,  # Use stable_id instead of short container ID
                         monitor_friendly_name=monitor['friendly_name'],
                         auto_mapped=True
                     )
@@ -827,7 +836,7 @@ async def create_uptime_kuma_mapping(mapping: dict):
 
 @app.delete("/api/uptime-kuma/mappings/{container_id}")
 async def delete_uptime_kuma_mapping(container_id: str):
-    """Delete a container-to-monitor mapping"""
+    """Delete a container-to-monitor mapping (container_id is actually stable_id)"""
     try:
         config = config_manager.get_config()
         config.uptime_kuma_mappings = [
@@ -835,7 +844,7 @@ async def delete_uptime_kuma_mapping(container_id: str):
         ]
         config_manager.update_config(config)
 
-        logger.info(f"Deleted Uptime-Kuma mapping for container: {container_id}")
+        logger.info(f"Deleted Uptime-Kuma mapping for stable_id: {container_id}")
 
         return {"success": True}
     except Exception as e:
