@@ -98,15 +98,16 @@ class UptimeKumaMonitor:
         while self._running:
             try:
                 await self._update_status_cache()
-                # Use monitor.interval_seconds for consistency with container monitoring
-                interval = config.monitor.interval_seconds
+                # Use 80% of monitor.interval_seconds to refresh before container checks
+                # This ensures fresh Uptime Kuma data is available when containers are checked
+                interval = int(config.monitor.interval_seconds * 0.8)
                 await asyncio.sleep(interval)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Error in Uptime-Kuma monitoring loop: {e}")
                 config = config_manager.get_config()
-                interval = config.monitor.interval_seconds
+                interval = int(config.monitor.interval_seconds * 0.8)
                 await asyncio.sleep(interval)
 
     async def _update_status_cache(self):

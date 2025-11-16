@@ -20,6 +20,10 @@ function UptimeKumaMappings({ mappings, monitors, containers, onAddMapping, onDe
     return container ? container.name : containerId;
   };
 
+  const isMonitorMapped = (monitorName) => {
+    return mappings.some(mapping => mapping.monitor_friendly_name === monitorName);
+  };
+
   const handleAddMapping = () => {
     if (!newMapping.container_id || !newMapping.monitor_friendly_name) {
       return;
@@ -101,11 +105,18 @@ function UptimeKumaMappings({ mappings, monitors, containers, onAddMapping, onDe
                 onChange={(e) => setNewMapping({...newMapping, monitor_friendly_name: e.target.value})}
               >
                 <option value="">Select Monitor...</option>
-                {monitors.map(m => (
-                  <option key={m.friendly_name} value={m.friendly_name}>
-                    {m.friendly_name}
-                  </option>
-                ))}
+                {monitors.map(m => {
+                  const isMapped = isMonitorMapped(m.friendly_name);
+                  return (
+                    <option
+                      key={m.friendly_name}
+                      value={m.friendly_name}
+                      disabled={isMapped}
+                    >
+                      {m.friendly_name}{isMapped ? ' - (Mapped)' : ''}
+                    </option>
+                  );
+                })}
               </Form.Select>
             </Form.Group>
           </Col>
