@@ -77,6 +77,10 @@ class MonitoringEngine:
             return
 
         self._running = True
+
+        # Proactively scan for existing containers with autoheal=true label
+        await self._scan_existing_containers()
+
         self._task = asyncio.create_task(self._monitor_loop())
         self._event_task = asyncio.create_task(self._event_listener_loop())
         logger.info("Monitoring engine started")
@@ -532,6 +536,104 @@ class MonitoringEngine:
             "monitored_containers": len(self._last_restart_times),
             "quarantined_containers": len(config_manager.get_quarantined_containers())
         }
+
+    async def _scan_existing_containers(self) -> None:
+        """
+        Proactively scan all existing containers on startup and auto-add those with autoheal=true label
+        This ensures containers that are already running when the service starts are added to config.json
+        """
+        try:
+            logger.info("Scanning existing containers for autoheal=true label...")
+
+            # Ensure Docker connection is active
+            if not self.docker_client.is_connected():
+                logger.warning("Docker connection not available for initial scan")
+                return
+
+            # Get all running containers
+            containers = await asyncio.to_thread(self.docker_client.list_containers, all_containers=False)
+
+            added_count = 0
+            config = config_manager.get_config()
+
+            for container in containers:
+                try:
+                    # Get container info including labels
+                    info = await asyncio.to_thread(
+                        self.docker_client.get_container_info,
+                        container
+                    )
+
+                    if not info:
+                        continue
+
+                    labels = info.get("labels", {})
+                    container_id = info.get("full_id")
+                    container_name = info.get("name")
+
+                    # Check if container has autoheal=true label
+                    if labels.get("autoheal") != "true":
+                        continue
+
+                    # Get stable identifier (handles auto-generated names, compose services)
+                    compose_project = labels.get("com.docker.compose.project")
+                    compose_service = labels.get("com.docker.compose.service")
+                    monitoring_id = labels.get("monitoring.id")
+
+                    # Determine best identifier (same logic as event listener)
+                    if monitoring_id:
+                        stable_id = monitoring_id
+                    elif compose_project and compose_service:
+                        stable_id = f"{compose_project}_{compose_service}"
+                    else:
+                        stable_id = container_name
+
+                    # Check if already in selected list (by stable_id, name, or ID for backwards compatibility)
+                    if (stable_id in config.containers.selected or
+                        container_name in config.containers.selected or
+                        container_id in config.containers.selected):
+                        logger.debug(f"Container {container_name} (stable_id: {stable_id}) already in monitored list")
+                        continue
+
+                    # Check if in excluded list
+                    if (stable_id in config.containers.excluded or
+                        container_name in config.containers.excluded or
+                        container_id in config.containers.excluded):
+                        logger.info(f"Container {container_name} (stable_id: {stable_id}) has autoheal=true but is in excluded list, skipping")
+                        continue
+
+                    # Add to monitored list using STABLE ID
+                    config.containers.selected.append(stable_id)
+                    added_count += 1
+
+                    # Log the auto-monitoring
+                    logger.info(f"Auto-monitoring enabled for container '{container_name}' ({container_id[:12]}) with stable_id '{stable_id}' - detected autoheal=true label on startup")
+
+                    # Create an event for this
+                    event_obj = AutoHealEvent(
+                        timestamp=datetime.now(timezone.utc),
+                        container_name=f"{container_name} ({stable_id})",
+                        container_id=container_id,
+                        event_type="auto_monitor",
+                        restart_count=0,
+                        status="enabled",
+                        message=f"Automatically added to monitoring on startup due to autoheal=true label (stable_id: {stable_id})"
+                    )
+                    config_manager.add_event(event_obj)
+
+                except Exception as e:
+                    logger.error(f"Error processing container during initial scan: {e}", exc_info=True)
+                    continue
+
+            # Save configuration if any containers were added
+            if added_count > 0:
+                config_manager.update_config(config)
+                logger.info(f"Initial scan complete: {added_count} container(s) auto-added to monitoring")
+            else:
+                logger.info("Initial scan complete: no new containers to add")
+
+        except Exception as e:
+            logger.error(f"Error during initial container scan: {e}", exc_info=True)
 
     async def _event_listener_loop(self) -> None:
         """

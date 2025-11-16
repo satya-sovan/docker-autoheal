@@ -10,6 +10,7 @@ import json
 import threading
 from pathlib import Path
 import logging
+from app.config.init_defaults import initialize_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,22 @@ class ObservabilityConfig(BaseModel):
     log_level: str = Field(default="INFO", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
 
 
+class UptimeKumaConfig(BaseModel):
+    """Uptime-Kuma integration configuration"""
+    enabled: bool = Field(default=False, description="Enable Uptime-Kuma integration")
+    server_url: str = Field(default="", description="Uptime-Kuma server URL (e.g., http://localhost:3001)")
+    username: str = Field(default="", description="Uptime-Kuma username (optional for API key auth)")
+    api_token: str = Field(default="", description="Uptime-Kuma API token or password")
+    auto_restart_on_down: bool = Field(default=True, description="Auto-restart container when monitor is DOWN")
+
+
+class UptimeKumaMapping(BaseModel):
+    """Container to Uptime-Kuma monitor mapping"""
+    container_id: str = Field(description="Container stable ID or name")
+    monitor_friendly_name: str = Field(description="Uptime-Kuma monitor friendly name")
+    auto_mapped: bool = Field(default=False, description="Whether this was auto-mapped")
+
+
 class AutoHealConfig(BaseModel):
     """Main auto-heal configuration"""
     monitor: MonitorConfig = Field(default_factory=MonitorConfig)
@@ -88,6 +105,8 @@ class AutoHealConfig(BaseModel):
     ui: UIConfig = Field(default_factory=UIConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
+    uptime_kuma: UptimeKumaConfig = Field(default_factory=UptimeKumaConfig)
+    uptime_kuma_mappings: List[UptimeKumaMapping] = Field(default_factory=list)
 
 
 class HealthCheckConfig(BaseModel):
@@ -136,6 +155,9 @@ class ConfigManager:
 
         # Create data directory if it doesn't exist
         self._ensure_data_directory()
+
+        # Initialize default files if they don't exist
+        initialize_defaults(self.DATA_DIR)
 
         # Load persisted data or initialize with defaults
         self._config = self._load_config()

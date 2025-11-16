@@ -36,6 +36,7 @@ function Navigation({ systemStatus }) {
               Events
             </Nav.Link>
 
+
             <Nav.Link
               as={Link}
               to="/config"

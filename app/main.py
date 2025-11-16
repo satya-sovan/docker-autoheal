@@ -15,6 +15,7 @@ from prometheus_client import start_http_server, Counter, Gauge
 from app.config.config_manager import config_manager
 from app.docker_client.docker_client_wrapper import DockerClientWrapper
 from app.monitor.monitoring_engine import MonitoringEngine
+from app.monitor.uptime_kuma_monitor import UptimeKumaMonitor
 from app.api.api import app, init_api
 
 # Ensure /data/logs directory exists
@@ -76,6 +77,7 @@ class AutoHealService:
     def __init__(self):
         self.docker_client: Optional[DockerClientWrapper] = None
         self.monitoring_engine: Optional[MonitoringEngine] = None
+        self.uptime_kuma_monitor: Optional[UptimeKumaMonitor] = None
         self.running = False
 
     async def start(self):
@@ -100,6 +102,13 @@ class AutoHealService:
             logger.info("Initializing monitoring engine...")
             self.monitoring_engine = MonitoringEngine(self.docker_client)
 
+            # Initialize Uptime-Kuma monitor
+            logger.info("Initializing Uptime-Kuma monitor...")
+            self.uptime_kuma_monitor = UptimeKumaMonitor(self.docker_client)
+
+            # Attach to monitoring engine for API access
+            self.monitoring_engine.uptime_kuma_monitor = self.uptime_kuma_monitor
+
             # Initialize API
             init_api(self.docker_client, self.monitoring_engine)
 
@@ -111,6 +120,12 @@ class AutoHealService:
             # Start monitoring engine
             logger.info("Starting monitoring engine...")
             await self.monitoring_engine.start()
+
+            # Start Uptime-Kuma monitor
+            logger.info(f"Uptime-Kuma enabled status: {config.uptime_kuma.enabled}")
+            if config.uptime_kuma.enabled:
+                logger.info("Starting Uptime-Kuma monitor...")
+                await self.uptime_kuma_monitor.start()
 
             self.running = True
             logger.info("Docker Auto-Heal Service started successfully")
@@ -126,6 +141,9 @@ class AutoHealService:
         logger.info("Stopping Docker Auto-Heal Service...")
 
         self.running = False
+
+        if self.uptime_kuma_monitor:
+            await self.uptime_kuma_monitor.stop()
 
         if self.monitoring_engine:
             await self.monitoring_engine.stop()
