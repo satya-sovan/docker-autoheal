@@ -816,9 +816,18 @@ async def create_uptime_kuma_mapping(mapping: dict):
     from app.config.config_manager import UptimeKumaMapping
 
     try:
+        # Get the container to resolve stable_id
+        container = docker_client.get_container(mapping['container_id'])
+        if not container:
+            raise HTTPException(status_code=404, detail="Container not found")
+
+        info = docker_client.get_container_info(container)
+        container_name = info.get("name")
+        stable_id = info.get("stable_id")
+
         config = config_manager.get_config()
         new_mapping = UptimeKumaMapping(
-            container_id=mapping['container_id'],
+            container_id=stable_id,
             monitor_friendly_name=mapping['monitor_friendly_name'],
             auto_mapped=False
         )
