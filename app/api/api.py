@@ -415,6 +415,20 @@ async def unquarantine_container(container_id: str):
         # Clear restart history using stable_id
         config_manager.clear_restart_history(stable_id)
 
+        event = AutoHealEvent(
+            timestamp=datetime.now(),
+            container_name=f"{container_name} ({stable_id})",
+            container_id=info.get("full_id"),  # Store current ID for reference
+            event_type="unquarantine",
+            restart_count=0,
+            status="success",
+            message=f"Container un-quarantined by user request"
+        )
+        config_manager.add_event(event)
+
+        # Send notification for quarantine event
+        await notification_manager.send_event_notification(event)
+
         return {"status": "success", "message": f"Container {container_name} removed from quarantine"}
     except HTTPException:
         raise
