@@ -13,6 +13,8 @@ from docker.models.containers import Container
 
 from app.config.config_manager import config_manager, AutoHealEvent, HealthCheckConfig
 from app.docker_client.docker_client_wrapper import DockerClientWrapper
+from app.notifications.notification_manager import notification_manager
+from app.notifications.notification_manager import notification_manager
 
 logger = logging.getLogger(__name__)
 
@@ -464,6 +466,9 @@ class MonitoringEngine:
             )
             config_manager.add_event(event)
 
+            # Send notification for quarantine event
+            await notification_manager.send_event_notification(event)
+
             logger.warning(f"Container {container_name} (stable_id: {stable_id}) quarantined after {restart_count} restarts")
 
             # Send alert if configured
@@ -494,13 +499,16 @@ class MonitoringEngine:
         event = AutoHealEvent(
             timestamp=datetime.now(timezone.utc),
             container_name=f"{container_name} ({stable_id})",
-            container_id=container_id,  # Store current ID for reference
+            container_id=container_id,
             event_type="restart",
             restart_count=restart_count + 1,
             status="success" if success else "failure",
             message=f"Restart {'successful' if success else 'failed'}: {reason}"
         )
         config_manager.add_event(event)
+
+        # Send notification for restart event
+        await notification_manager.send_event_notification(event)
 
         if success:
             logger.info(f"Successfully restarted container {container_name} (stable_id: {stable_id})")
@@ -640,6 +648,9 @@ class MonitoringEngine:
                         message=f"Automatically added to monitoring on startup due to autoheal=true label (stable_id: {stable_id})"
                     )
                     config_manager.add_event(event_obj)
+
+                    # Send notification for auto-monitor event
+                    await notification_manager.send_event_notification(event_obj)
 
                 except Exception as e:
                     logger.error(f"Error processing container during initial scan: {e}", exc_info=True)
@@ -802,6 +813,9 @@ class MonitoringEngine:
                     message=f"Automatically added to monitoring due to autoheal=true label (stable_id: {stable_id})"
                 )
                 config_manager.add_event(event_obj)
+
+                # Send notification for auto-monitor event
+                await notification_manager.send_event_notification(event_obj)
 
         except Exception as e:
             logger.error(f"Error processing container start event: {e}", exc_info=True)

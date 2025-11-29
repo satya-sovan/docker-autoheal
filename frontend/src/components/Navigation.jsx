@@ -36,6 +36,14 @@ function Navigation({ systemStatus }) {
               Events
             </Nav.Link>
 
+            <Nav.Link
+              as={Link}
+              to="/notifications"
+              className={isActive('/notifications') ? 'active' : ''}
+            >
+              <i className="bi bi-bell me-1"></i>
+              Notifications
+            </Nav.Link>
 
             <Nav.Link
               as={Link}

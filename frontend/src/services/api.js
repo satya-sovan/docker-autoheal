@@ -64,5 +64,13 @@ export const enableMaintenanceMode = () => api.post('/maintenance/enable');
 export const disableMaintenanceMode = () => api.post('/maintenance/disable');
 export const getMaintenanceStatus = () => api.get('/maintenance/status');
 
+// Notifications
+export const getNotificationsConfig = () => api.get('/notifications/config');
+export const updateNotificationsConfig = (config) => api.put('/notifications/config', config);
+export const addNotificationService = (service) => api.post('/notifications/services', service);
+export const updateNotificationService = (serviceName, service) => api.put(`/notifications/services/${serviceName}`, service);
+export const deleteNotificationService = (serviceName) => api.delete(`/notifications/services/${serviceName}`);
+export const testNotificationService = (serviceName) => api.post(`/notifications/test/${serviceName}`);
+
 export default api;
 

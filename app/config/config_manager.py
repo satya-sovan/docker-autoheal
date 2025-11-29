@@ -96,6 +96,44 @@ class UptimeKumaMapping(BaseModel):
     auto_mapped: bool = Field(default=False, description="Whether this was auto-mapped")
 
 
+class NotificationService(BaseModel):
+    """Notification service configuration"""
+    name: str = Field(description="Service name (for identification)")
+    type: str = Field(description="Service type: webhook, discord, slack, telegram, ntfy, gotify, pushover")
+    enabled: bool = Field(default=True, description="Enable this notification service")
+
+    # Common fields
+    url: Optional[str] = Field(default=None, description="Webhook URL (webhook, discord, slack)")
+    headers: Optional[Dict[str, str]] = Field(default=None, description="Custom headers for webhook")
+    username: Optional[str] = Field(default=None, description="Username (discord, ntfy)")
+    password: Optional[str] = Field(default=None, description="Password (ntfy)")
+
+    # Telegram
+    bot_token: Optional[str] = Field(default=None, description="Telegram bot token")
+    chat_id: Optional[str] = Field(default=None, description="Telegram chat ID")
+
+    # Ntfy
+    topic: Optional[str] = Field(default=None, description="Ntfy topic")
+    server_url: Optional[str] = Field(default=None, description="Ntfy server URL (default: https://ntfy.sh)")
+
+    # Gotify
+    app_token: Optional[str] = Field(default=None, description="Gotify app token")
+
+    # Pushover
+    user_key: Optional[str] = Field(default=None, description="Pushover user key")
+    api_token: Optional[str] = Field(default=None, description="Pushover API token")
+
+
+class NotificationsConfig(BaseModel):
+    """Notifications configuration"""
+    enabled: bool = Field(default=False, description="Enable notification system")
+    services: List[NotificationService] = Field(default_factory=list, description="List of notification services")
+    event_filters: List[str] = Field(
+        default_factory=lambda: ["restart", "quarantine", "health_check_failed"],
+        description="Event types to send notifications for (empty = all events)"
+    )
+
+
 class AutoHealConfig(BaseModel):
     """Main auto-heal configuration"""
     monitor: MonitorConfig = Field(default_factory=MonitorConfig)
@@ -107,6 +145,7 @@ class AutoHealConfig(BaseModel):
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     uptime_kuma: UptimeKumaConfig = Field(default_factory=UptimeKumaConfig)
     uptime_kuma_mappings: List[UptimeKumaMapping] = Field(default_factory=list)
+    notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
 
 
 class HealthCheckConfig(BaseModel):

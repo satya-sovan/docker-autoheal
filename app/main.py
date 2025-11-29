@@ -16,6 +16,7 @@ from app.config.config_manager import config_manager
 from app.docker_client.docker_client_wrapper import DockerClientWrapper
 from app.monitor.monitoring_engine import MonitoringEngine
 from app.monitor.uptime_kuma_monitor import UptimeKumaMonitor
+from app.notifications.notification_manager import notification_manager
 from app.api.api import app, init_api
 
 # Ensure /data/logs directory exists
@@ -90,6 +91,7 @@ class AutoHealService:
     def __init__(self):
         self.docker_client: Optional[DockerClientWrapper] = None
         self.monitoring_engine: Optional[MonitoringEngine] = None
+        self.notification_manager = notification_manager
         self.uptime_kuma_monitor: Optional[UptimeKumaMonitor] = None
         self.running = False
 
@@ -128,6 +130,12 @@ class AutoHealService:
             # Start Prometheus metrics server if enabled
             if config.observability.prometheus_enabled:
                 logger.info(f"Starting Prometheus metrics server on port {config.observability.metrics_port}")
+            # Start notification manager
+            logger.info("Starting notification manager...")
+            await self.notification_manager.start()
+            if config.notifications.enabled:
+                logger.info(f"Notifications enabled with {len(config.notifications.services)} service(s)")
+
                 start_http_server(config.observability.metrics_port)
 
             # Start monitoring engine
@@ -150,6 +158,8 @@ class AutoHealService:
 
         except Exception as e:
             logger.error(f"Failed to start service: {e}", exc_info=True)
+            if self.notification_manager:
+                await self.notification_manager.stop()
             raise
 
     async def stop(self):

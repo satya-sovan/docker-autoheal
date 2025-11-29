@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import ContainersPage from './components/ContainersPage';
 import EventsPage from './components/EventsPage';
 import ConfigPage from './components/ConfigPage';
+import NotificationsPage from './components/NotificationsPage';
 import MaintenanceModal from './components/MaintenanceModal';
 import {
   getSystemStatus,
@@ -103,6 +104,7 @@ function App() {
               </>
             }
           />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/config" element={<ConfigPage />} />
         </Routes>
