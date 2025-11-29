@@ -34,7 +34,7 @@ function UptimeKumaMappings({ mappings, monitors, containers, onAddMapping, onDe
 
   return (
     <Card>
-      <Card.Header className="bg-light">
+      <Card.Header>
         <strong>Container-Monitor Mappings</strong>
       </Card.Header>
       <Card.Body>

@@ -1,14 +1,54 @@
+/* CSS Variables for Light and Dark Themes */
+:root {
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f8f9fa;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --border-color: #dee2e6;
+  --shadow-sm: rgba(0, 0, 0, 0.08);
+  --shadow-md: rgba(0, 0, 0, 0.1);
+  --shadow-lg: rgba(0, 0, 0, 0.15);
+  --hover-bg: rgba(0, 123, 255, 0.05);
+  --scrollbar-track: #f1f1f1;
+  --scrollbar-thumb: #888;
+  --scrollbar-thumb-hover: #555;
+  --code-bg: #f8f9fa;
+  --modal-backdrop: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] {
+  --bg-primary: #1a1d23;
+  --bg-secondary: #25292f;
+  --bg-tertiary: #2d3138;
+  --text-primary: #e9ecef;
+  --text-secondary: #adb5bd;
+  --border-color: #495057;
+  --shadow-sm: rgba(0, 0, 0, 0.3);
+  --shadow-md: rgba(0, 0, 0, 0.4);
+  --shadow-lg: rgba(0, 0, 0, 0.5);
+  --hover-bg: rgba(13, 110, 253, 0.15);
+  --scrollbar-track: #2d3138;
+  --scrollbar-thumb: #495057;
+  --scrollbar-thumb-hover: #6c757d;
+  --code-bg: #2d3138;
+  --modal-backdrop: rgba(0, 0, 0, 0.7);
+}
+
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f5f5f5;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   margin: 0;
   padding: 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .app {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background-color: var(--bg-primary);
 }
 
 /* Dashboard Metrics */
@@ -22,33 +62,110 @@ body {
 }
 
 /* Container Table */
+.table {
+  color: var(--text-primary);
+}
+
 .table tbody tr {
   transition: background-color 0.15s ease;
+  background-color: var(--bg-secondary);
 }
 
 .table tbody tr:hover {
-  background-color: rgba(0, 123, 255, 0.05);
+  background-color: var(--hover-bg);
+}
+
+.table thead th {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.table tbody td,
+.table tbody th {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  background-color: transparent;
+}
+
+/* Dark mode specific table overrides */
+.dark-mode .table {
+  --bs-table-bg: transparent;
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.05);
+  --bs-table-striped-color: var(--text-primary);
+  --bs-table-active-bg: rgba(255, 255, 255, 0.1);
+  --bs-table-active-color: var(--text-primary);
+  --bs-table-hover-bg: var(--hover-bg);
+  --bs-table-hover-color: var(--text-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .table > :not(caption) > * > * {
+  background-color: var(--bg-secondary);
+  border-bottom-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-mode .table thead th {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .table tbody tr {
+  background-color: var(--bg-secondary);
+}
+
+.dark-mode .table tbody td,
+.dark-mode .table tbody th {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
+  --bs-table-accent-bg: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
 }
 
 /* Event Items */
 .event-item {
   transition: all 0.2s ease;
+  background-color: var(--bg-secondary);
 }
 
 .event-item:hover {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 8px var(--shadow-md);
   transform: translateX(5px);
 }
 
 /* Cards */
 .card {
   border: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: box-shadow 0.2s ease;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px var(--shadow-sm);
+  transition: box-shadow 0.2s ease, background-color 0.3s ease;
 }
 
 .card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 12px var(--shadow-md);
+}
+
+.card-header {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.card-footer {
+  background-color: var(--bg-tertiary);
+  border-top: 1px solid var(--border-color);
+}
+
+.card-body {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 /* Badges */
@@ -64,7 +181,7 @@ body {
 
 .btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px var(--shadow-lg);
 }
 
 /* Loading Spinner */
@@ -77,12 +194,21 @@ body {
 
 /* Navbar */
 .navbar {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px var(--shadow-md);
+  transition: background-color 0.3s ease;
 }
 
 .navbar-brand {
   font-weight: 600;
   font-size: 1.25rem;
+}
+
+.dark-mode .navbar-dark .navbar-nav .nav-link {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dark-mode .navbar-dark .navbar-nav .nav-link:hover {
+  color: rgba(255, 255, 255, 1);
 }
 
 /* Scrollbar Styling */
@@ -92,12 +218,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Maintenance Mode */
@@ -119,9 +249,6 @@ body {
   transition: opacity 0.3s ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -161,15 +288,18 @@ body {
 
 /* Code blocks */
 pre {
-  background-color: #f8f9fa;
+  background-color: var(--code-bg);
+  color: var(--text-primary);
   padding: 1rem;
   border-radius: 0.25rem;
   overflow-x: auto;
   font-size: 0.875rem;
+  border: 1px solid var(--border-color);
 }
 
 code {
-  background-color: #f8f9fa;
+  background-color: var(--code-bg);
+  color: var(--text-primary);
   padding: 0.2rem 0.4rem;
   border-radius: 0.25rem;
   font-size: 0.875em;
@@ -178,10 +308,43 @@ code {
 /* Modal */
 .modal-content {
   border: none;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 10px 40px var(--shadow-lg);
+}
+
+.dark-mode .modal-header,
+.dark-mode .modal-footer {
+  border-color: var(--border-color);
+}
+
+.dark-mode .modal-backdrop {
+  background-color: var(--modal-backdrop);
 }
 
 /* Form Controls */
+.form-control,
+.form-select {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .form-control,
+.dark-mode .form-select {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .form-control:focus,
+.dark-mode .form-select:focus {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
 .form-control:focus,
 .form-select:focus {
   border-color: #0d6efd;
@@ -223,3 +386,92 @@ code {
   animation: fadeIn 0.3s ease-in;
 }
 
+/* Dark Mode Toggle Button */
+.dark-mode-toggle {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 1.2rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 0.25rem;
+}
+
+.dark-mode-toggle:hover {
+  color: rgba(255, 255, 255, 1);
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: rotate(20deg);
+}
+
+/* Additional Dark Mode Overrides */
+.dark-mode .list-group-item {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+/* Table Responsive Container */
+.dark-mode .table-responsive {
+  border-color: var(--border-color);
+}
+
+/* Ensure text colors in tables */
+.dark-mode .table .text-muted {
+  color: var(--text-secondary) !important;
+}
+
+.dark-mode .table small {
+  color: var(--text-secondary);
+}
+
+/* Table badges should maintain their colors */
+.dark-mode .table .badge {
+  opacity: 1;
+}
+
+.dark-mode .dropdown-menu {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+.dark-mode .dropdown-item {
+  color: var(--text-primary);
+}
+
+.dark-mode .dropdown-item:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.dark-mode .text-muted {
+  color: var(--text-secondary) !important;
+}
+
+.dark-mode .border {
+  border-color: var(--border-color) !important;
+}
+
+.dark-mode hr {
+  border-color: var(--border-color);
+  opacity: 0.3;
+}
+
+/* Maintenance Modal Dark Mode */
+.dark-mode .maintenance-modal .modal-content {
+  background-color: var(--bg-secondary);
+  border-color: #ffc107;
+}
+
+/* Toast Notifications Dark Mode */
+.dark-mode .toast {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.dark-mode .toast-header {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}

@@ -161,13 +161,14 @@ frontend/
 
 ## 🎨 React Features
 
-### Modern Stack
+### React Features
 - ⚡ **Vite** - Fast build tool and dev server
 - ⚛️ **React 18** - Latest React with concurrent features
 - 🎨 **Bootstrap 5** - UI components via react-bootstrap
 - 🛣️ **React Router** - Client-side routing
 - 📡 **Axios** - HTTP client with interceptors
 - 📅 **date-fns** - Date formatting
+- 🌓 **Dark Mode** - System-aware theme with persistence
 
 ### Component Features
 - ✅ Real-time data updates (5-10s refresh)
@@ -177,6 +178,7 @@ frontend/
 - ✅ Modal dialogs for details
 - ✅ Form validation
 - ✅ File upload/download
+- ✅ Dark mode toggle with smooth transitions
 
 ### Developer Experience
 - 🔥 Hot Module Replacement
@@ -274,6 +276,55 @@ Access: `http://localhost:8080` (serves `static/`)
 docker build -t autoheal .
 docker run -p 8080:8080 autoheal
 ```
+
+## 🌓 Dark Mode Feature
+
+The React UI includes a comprehensive dark mode feature:
+
+### Features
+- **Toggle Button**: Click sun/moon icon in navigation bar
+- **Auto-Detection**: Respects system color scheme preference
+- **Persistent**: Saves to localStorage across sessions
+- **Smooth Transitions**: 0.3s ease animations
+- **Complete Coverage**: All components properly themed
+
+### Usage
+1. Look for the moon/sun icon in the top-right of the navigation bar
+2. Click to toggle between light and dark modes
+3. Your preference is automatically saved
+
+### For Developers
+
+**Custom Hook:**
+```javascript
+import { useDarkMode } from './hooks/useDarkMode';
+
+function MyComponent() {
+  const [darkMode, toggleDarkMode] = useDarkMode();
+  return <button onClick={toggleDarkMode}>Toggle</button>;
+}
+```
+
+**CSS Variables:**
+```css
+.my-component {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+```
+
+**Dark Mode Override:**
+```css
+.dark-mode .my-component {
+  /* specific dark styling */
+}
+```
+
+### Documentation
+- Quick Start: `../docs/DARK_MODE_QUICKSTART.md`
+- Full Guide: `../docs/DARK_MODE.md`
+- Testing: `../docs/DARK_MODE_TESTING.md`
+- Architecture: `../docs/DARK_MODE_ARCHITECTURE.md`
 
 ## 🐛 Troubleshooting
 

@@ -1,7 +1,7 @@
 import { Navbar, Nav, Container, Badge } from 'react-bootstrap';
 import { Link, useLocation } from 'react-router-dom';
 
-function Navigation({ systemStatus }) {
+function Navigation({ systemStatus, darkMode, toggleDarkMode }) {
   const location = useLocation();
 
   const isActive = (path) => location.pathname === path;
@@ -61,6 +61,18 @@ function Navigation({ systemStatus }) {
           </Nav>
 
           <Nav>
+            {/* Dark Mode Toggle */}
+            <Nav.Item className="d-flex align-items-center me-3">
+              <button
+                className="dark-mode-toggle"
+                onClick={toggleDarkMode}
+                title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                aria-label={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              >
+                <i className={`bi ${darkMode ? 'bi-sun-fill' : 'bi-moon-stars-fill'}`}></i>
+              </button>
+            </Nav.Item>
+
             {systemStatus && (
               <Nav.Item className="d-flex align-items-center text-light">
                 <Badge

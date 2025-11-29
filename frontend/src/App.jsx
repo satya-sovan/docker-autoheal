@@ -8,6 +8,7 @@ import EventsPage from './components/EventsPage';
 import ConfigPage from './components/ConfigPage';
 import NotificationsPage from './components/NotificationsPage';
 import MaintenanceModal from './components/MaintenanceModal';
+import { useDarkMode } from './hooks/useDarkMode';
 import {
   getSystemStatus,
   enableMaintenanceMode,
@@ -19,6 +20,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [errorToast, setErrorToast] = useState({ show: false, message: '' });
+  const [darkMode, toggleDarkMode] = useDarkMode();
 
   const fetchSystemStatus = async () => {
     try {
@@ -76,7 +78,11 @@ function App() {
 
   return (
     <div className="app">
-      <Navigation systemStatus={systemStatus} />
+      <Navigation
+        systemStatus={systemStatus}
+        darkMode={darkMode}
+        toggleDarkMode={toggleDarkMode}
+      />
 
       <Container
         fluid

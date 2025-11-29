@@ -89,7 +89,7 @@ function UptimeKumaIntegration({
           />
         ) : (
           <>
-            <div className="mb-3 p-3 bg-light rounded">
+            <div className="mb-3 p-3 rounded" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
               <div className="mt-2 small text-muted">
                 <div><strong>Server:</strong> {config.server_url}</div>
                 <div><strong>Monitors:</strong> {monitors.length} | <strong>Mappings:</strong> {mappings.length}</div>

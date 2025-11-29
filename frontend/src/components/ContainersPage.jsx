@@ -376,14 +376,14 @@ function ContainersPage() {
               {modalContainer.health && (
                 <>
                   <h6 className="mt-3">Health Status</h6>
-                  <pre className="bg-light p-3 rounded">
+                  <pre className="p-3 rounded">
                     {JSON.stringify(modalContainer.health, null, 2)}
                   </pre>
                 </>
               )}
 
               <h6 className="mt-3">Labels</h6>
-              <pre className="bg-light p-3 rounded">
+              <pre className="p-3 rounded">
                 {JSON.stringify(modalContainer.labels, null, 2)}
               </pre>
             </div>

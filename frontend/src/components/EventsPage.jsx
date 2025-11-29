@@ -130,7 +130,7 @@ function EventsPage() {
             {[...events].reverse().map((event, index) => (
               <div
                 key={index}
-                className={`event-item border-start border-${getEventVariant(event.status)} border-4 p-3 mb-3 bg-light rounded`}
+                className={`event-item border-start border-${getEventVariant(event.status)} border-4 p-3 mb-3 rounded`}
               >
                 <div className="d-flex justify-content-between align-items-start mb-2">
                   <div>

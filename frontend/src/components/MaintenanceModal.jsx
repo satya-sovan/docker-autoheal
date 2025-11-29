@@ -52,7 +52,7 @@ function MaintenanceModal({ show, startTime, onDismiss }) {
           <br />
           Manual operations are still available.
         </p>
-        <div className="bg-light rounded p-4 mb-4">
+        <div className="rounded p-4 mb-4" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
           <div className="text-muted small mb-2">TIME IN MAINTENANCE</div>
           <div className="display-4 fw-bold text-warning font-monospace">
             {elapsedTime}
