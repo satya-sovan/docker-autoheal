@@ -56,15 +56,52 @@ if "%USERNAME%"=="" (
     exit /b 1
 )
 
+REM Get release type
+echo.
+echo ============================================================
+echo   Release Type
+echo ============================================================
+echo.
+echo Is this a BETA or PRODUCTION release?
+echo   [B] Beta - Appends '-BETA' to tag (won't push 'latest')
+echo   [P] Production - Pushes with tag and also as 'latest'
+echo.
+set /p RELEASE_TYPE="Enter release type (B/P): "
+if /i not "%RELEASE_TYPE%"=="B" if /i not "%RELEASE_TYPE%"=="P" (
+    echo Invalid choice! Please enter B or P.
+    pause
+    exit /b 1
+)
+
 REM Get tag
 echo.
 echo Version tags (examples):
-echo   - latest (default, always up-to-date)
 echo   - v1.0.0 (semantic versioning)
-echo   - v1.1, stable, dev, etc.
+echo   - v1.1, v2.0, stable, dev, etc.
 echo.
-set /p TAG="Enter tag (press Enter for 'latest'): "
-if "%TAG%"=="" set TAG=latest
+if /i "%RELEASE_TYPE%"=="B" (
+    echo NOTE: Do NOT append '-BETA' - it will be auto-tagged for beta releases
+) else (
+    echo NOTE: Do NOT use 'latest' - it will be auto-tagged for production releases
+)
+echo.
+:GET_TAG
+set /p TAG="Enter tag (e.g., v1.0.0): "
+if "%TAG%"=="" (
+    echo Tag cannot be empty!
+    goto GET_TAG
+)
+if /i "%TAG%"=="latest" (
+    echo 'latest' is reserved and auto-managed. Please use a different tag.
+    goto GET_TAG
+)
+
+REM Append -BETA if beta release
+if /i "%RELEASE_TYPE%"=="B" (
+    set TAG=%TAG%-BETA
+    echo.
+    echo Beta release detected. Tag will be: %TAG%
+)
 
 REM Confirmation
 echo.
@@ -72,8 +109,18 @@ echo ============================================================
 echo   Ready to Publish
 echo ============================================================
 echo.
+echo Release Type: %RELEASE_TYPE%
+if /i "%RELEASE_TYPE%"=="B" (
+    echo   ^(Beta - will NOT push 'latest' tag^)
+) else (
+    echo   ^(Production - will ALSO push 'latest' tag^)
+)
+echo.
 echo Image will be published as:
 echo   %USERNAME%/docker-autoheal:%TAG%
+if /i "%RELEASE_TYPE%"=="P" (
+    echo   %USERNAME%/docker-autoheal:latest
+)
 echo.
 echo This will:
 echo   1. Build the Docker image (includes React build)
@@ -111,12 +158,12 @@ echo.
 echo [OK] Build successful!
 echo.
 
-REM Tag as latest if not already
-if not "%TAG%"=="latest" (
-    echo [Step 2/3] Tagging as latest...
+REM Tag as latest if production release
+if /i "%RELEASE_TYPE%"=="P" (
+    echo [Step 2/3] Tagging as latest for production release...
     docker tag %USERNAME%/docker-autoheal:%TAG% %USERNAME%/docker-autoheal:latest
 ) else (
-    echo [Step 2/3] Already tagged as latest
+    echo [Step 2/3] Skipping 'latest' tag (beta release)
 )
 
 echo.
@@ -133,7 +180,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not "%TAG%"=="latest" (
+if /i "%RELEASE_TYPE%"=="P" (
     echo.
     echo Pushing latest tag...
     docker push %USERNAME%/docker-autoheal:latest

@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   autoheal:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: swaya1125/docker-autoheal:latest
     container_name: docker-autoheal
     restart: unless-stopped
 
