@@ -304,6 +304,10 @@ class MonitoringEngine:
         state = info.get("state", {})
         status = state.get("Status", "").lower()
 
+        if status == "starting":
+            logger.debug(f"Container {info.get('name')} is still starting, skipping health evaluation")
+            return False, "Container is starting"
+
         if status in ["exited", "stopped", "dead"]:
             exit_code = state.get("ExitCode", 0)
 
@@ -346,7 +350,7 @@ class MonitoringEngine:
 
         # Check Uptime-Kuma monitor status (if configured and enabled)
         if hasattr(self, 'uptime_kuma_monitor') and self.uptime_kuma_monitor:
-            if self.uptime_kuma_monitor.should_restart_from_uptime_kuma(stable_id):
+            if await self.uptime_kuma_monitor.should_restart_from_uptime_kuma(stable_id):
                 return True, "Uptime-Kuma monitor reports DOWN"
 
         return False, ""

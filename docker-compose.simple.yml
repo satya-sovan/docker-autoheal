@@ -24,6 +24,7 @@ services:
     # Environment variables
     environment:
       - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=DEBUG
 
     # Labels for auto-heal (exclude itself from monitoring)
     labels:

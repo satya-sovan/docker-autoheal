@@ -92,23 +92,31 @@ class UptimeKumaMonitor:
         logger.info(f"Cached {len(self._monitor_cache)} Uptime-Kuma monitors")
 
     async def _monitoring_loop(self):
-        """Main monitoring loop - check Uptime-Kuma statuses and cache them"""
+        """Main monitoring loop - check Uptime-Kuma statuses and cache them in sync with container checks"""
         config = config_manager.get_config()
+        interval = config.monitor.interval_seconds
+        offset = int(interval * 0.2)  # Refresh 20% before container check
+
+        # Calculate the next container check time
+        next_check = asyncio.get_event_loop().time() + interval
 
         while self._running:
             try:
+                # Sleep until (next_check - offset)
+                now = asyncio.get_event_loop().time()
+                sleep_time = max(0, (next_check - offset) - now)
+                await asyncio.sleep(sleep_time)
+
                 await self._update_status_cache()
-                # Use 80% of monitor.interval_seconds to refresh before container checks
-                # This ensures fresh Uptime Kuma data is available when containers are checked
-                interval = int(config.monitor.interval_seconds * 0.8)
-                await asyncio.sleep(interval)
+
+                # Schedule next check
+                next_check += interval
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Error in Uptime-Kuma monitoring loop: {e}")
-                config = config_manager.get_config()
-                interval = int(config.monitor.interval_seconds * 0.8)
-                await asyncio.sleep(interval)
+                # On error, resync to next interval
+                next_check = asyncio.get_event_loop().time() + interval
 
     async def _update_status_cache(self):
         """Update cache of container health statuses from Uptime-Kuma monitors"""
@@ -145,7 +153,7 @@ class UptimeKumaMonitor:
 
         return any(mapping.container_id == stable_id for mapping in config.uptime_kuma_mappings)
 
-    def should_restart_from_uptime_kuma(self, stable_id: str) -> bool:
+    async def should_restart_from_uptime_kuma(self, stable_id: str) -> bool:
         config = config_manager.get_config()
 
         # Check if auto-restart on down is enabled
@@ -155,6 +163,9 @@ class UptimeKumaMonitor:
         # Check if container is mapped
         if not self.is_container_mapped(stable_id):
             return False
+
+        # Update cache (async)
+        await self._update_status_cache()
 
         # Check monitor status
         status = self.get_container_status(stable_id)
