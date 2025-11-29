@@ -91,19 +91,27 @@ class MonitoringEngine:
         if not self._running:
             return
 
+        logger.info("Stopping monitoring engine...")
         self._running = False
+
         if self._task:
             self._task.cancel()
             try:
                 await self._task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected during shutdown
+            except Exception as e:
+                logger.warning(f"Error stopping monitor loop: {e}")
+
         if self._event_task:
             self._event_task.cancel()
             try:
                 await self._event_task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected during shutdown
+            except Exception as e:
+                logger.warning(f"Error stopping event listener: {e}")
+
         logger.info("Monitoring engine stopped")
         logger.info("Event listener stopped")
 

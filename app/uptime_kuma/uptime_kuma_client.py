@@ -44,7 +44,7 @@ class UptimeKumaClient:
                     logger.warning(f"Unexpected response status: {response.status}")
                     return False
         except Exception as e:
-            logger.error(f"Failed to connect to Uptime-Kuma: {e}", exc_info=True)
+            logger.warning(f"Failed to connect to Uptime-Kuma: {e}")
             return False
 
     async def get_all_monitors(self) -> List[Dict]:

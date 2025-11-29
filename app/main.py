@@ -42,6 +42,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.info(f"Logging to: {LOG_FILE}")
 
+
+class CancelledErrorFilter(logging.Filter):
+    """Filter to suppress CancelledError from uvicorn.error logs during shutdown"""
+    def filter(self, record):
+        # Suppress CancelledError tracebacks from uvicorn (these are expected during shutdown)
+        if record.name == "uvicorn.error" and "CancelledError" in record.getMessage():
+            return False
+        return True
+
+
 def update_log_level(level_name: str):
     """Update logging level for all loggers"""
     level_map = {
@@ -60,6 +70,9 @@ def update_log_level(level_name: str):
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
+
+    # Add filter to suppress CancelledError tracebacks
+    logging.getLogger("uvicorn.error").addFilter(CancelledErrorFilter())
 
     logger.info(f"Log level set to: {level_name}")
 
@@ -125,7 +138,10 @@ class AutoHealService:
             logger.info(f"Uptime-Kuma enabled status: {config.uptime_kuma.enabled}")
             if config.uptime_kuma.enabled:
                 logger.info("Starting Uptime-Kuma monitor...")
-                await self.uptime_kuma_monitor.start()
+                try:
+                    await self.uptime_kuma_monitor.start()
+                except Exception as e:
+                    logger.warning(f"Uptime-Kuma failed to start: {e}")
 
             self.running = True
             logger.info("Docker Auto-Heal Service started successfully")
@@ -142,14 +158,24 @@ class AutoHealService:
 
         self.running = False
 
+        # Stop components gracefully with error handling
         if self.uptime_kuma_monitor:
-            await self.uptime_kuma_monitor.stop()
+            try:
+                await self.uptime_kuma_monitor.stop()
+            except Exception as e:
+                logger.warning(f"Error stopping Uptime-Kuma monitor: {e}")
 
         if self.monitoring_engine:
-            await self.monitoring_engine.stop()
+            try:
+                await self.monitoring_engine.stop()
+            except Exception as e:
+                logger.warning(f"Error stopping monitoring engine: {e}")
 
         if self.docker_client:
-            self.docker_client.close()
+            try:
+                self.docker_client.close()
+            except Exception as e:
+                logger.warning(f"Error closing Docker client: {e}")
 
         logger.info("Docker Auto-Heal Service stopped")
 
@@ -214,10 +240,13 @@ async def main():
     try:
         await asyncio.gather(
             service.run(),
-            run_api_server()
+            run_api_server(),
+            return_exceptions=True  # Don't propagate CancelledError
         )
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt")
+    except asyncio.CancelledError:
+        logger.info("Application cancelled, shutting down gracefully")
     except Exception as e:
         logger.error(f"Service error: {e}", exc_info=True)
     finally:

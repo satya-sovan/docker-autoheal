@@ -73,14 +73,19 @@ class UptimeKumaMonitor:
 
     async def stop(self):
         """Stop Uptime-Kuma monitoring"""
+        logger.info("Stopping Uptime-Kuma monitor...")
         self._running = False
+
         if self._task:
             self._task.cancel()
             try:
                 await self._task
             except asyncio.CancelledError:
-                pass
-            logger.info("Uptime-Kuma monitoring stopped")
+                pass  # Expected during shutdown
+            except Exception as e:
+                logger.warning(f"Error stopping Uptime-Kuma task: {e}")
+
+        logger.info("Uptime-Kuma monitoring stopped")
 
     async def _refresh_monitor_cache(self):
         """Refresh cache of monitor IDs by friendly name"""
