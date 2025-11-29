@@ -125,7 +125,10 @@ class AutoHealService:
             logger.info(f"Uptime-Kuma enabled status: {config.uptime_kuma.enabled}")
             if config.uptime_kuma.enabled:
                 logger.info("Starting Uptime-Kuma monitor...")
-                await self.uptime_kuma_monitor.start()
+                try:
+                    await self.uptime_kuma_monitor.start()
+                except Exception as e:
+                    logger.warning(f"Uptime-Kuma failed to start: {e}")
 
             self.running = True
             logger.info("Docker Auto-Heal Service started successfully")
