@@ -1,5 +1,48 @@
 # Changelog - Notification System
 
+## [v1.3.0] - 2025-12-16
+
+### Added - Auto-Unquarantine Feature 🔄
+
+#### Overview
+When a container is quarantined (exceeded max restarts), the system now continuously monitors it. If the container becomes healthy again (e.g., manual fix or automatic recovery), it is **automatically removed from quarantine**.
+
+#### Features
+- **Automatic Quarantine Removal**: Containers that auto-heal are automatically unquarantined
+- **Health Verification**: The system checks:
+  - Container is running
+  - Docker native health check (if configured) reports "healthy"
+  - Custom health checks pass (if configured)
+- **Restart Counter Reset**: When auto-unquarantined, the restart counter is cleared
+- **Event Logging**: Creates `auto_unquarantine` event in the event log
+- **Notification Support**: Sends notification when container is auto-unquarantined
+- **New Event Type**: `auto_unquarantine` added to default notification filters
+
+#### Event Details
+The `auto_unquarantine` event includes:
+- Container name and stable ID
+- Timestamp
+- Status: "success"
+- Message: "Container automatically removed from quarantine - auto-healed and now healthy"
+
+#### How It Works
+1. Container exceeds max restarts → Quarantined
+2. Each health check cycle, quarantined containers are checked
+3. If container is healthy (running + passes health checks):
+   - Removed from quarantine
+   - Restart count cleared
+   - Backoff delay reset
+   - Event logged
+   - Notification sent (if enabled)
+4. Container returns to normal monitoring
+
+#### Testing
+- Added `test_auto_unquarantine.py` with comprehensive unit tests
+- Tests cover all health status scenarios
+- Tests verify event creation and notification flow
+
+---
+
 ## [v1.2.0] - 2025-11-29
 
 ### Added - Notification System 🔔

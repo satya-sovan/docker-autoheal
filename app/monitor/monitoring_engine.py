@@ -193,16 +193,36 @@ class MonitoringEngine:
         # Get stable identifier (handles auto-generated names, compose services, explicit IDs)
         stable_id = self.get_stable_identifier(info)
 
-        # Check if container is quarantined (by stable ID, name, or ID for backwards compatibility)
-        if (config_manager.is_quarantined(stable_id) or
-            config_manager.is_quarantined(container_name) or
-            config_manager.is_quarantined(container_id)):
-            logger.debug(f"Container {container_name} (stable_id: {stable_id}) is quarantined, skipping")
-            return
-
         # Check if container should be monitored
         if not self.should_monitor_container(container, info):
             return
+
+        # Check if container is quarantined (by stable ID, name, or ID for backwards compatibility)
+        quarantine_id = None
+        if config_manager.is_quarantined(stable_id):
+            quarantine_id = stable_id
+        elif config_manager.is_quarantined(container_name):
+            quarantine_id = container_name
+        elif config_manager.is_quarantined(container_id):
+            quarantine_id = container_id
+
+        if quarantine_id:
+            # Container is quarantined - check if it has auto-healed using existing health evaluation
+            # First check: container must be running
+            state = info.get("state", {})
+            status = state.get("Status", "").lower()
+
+            if status == "running":
+                # Reuse existing health evaluation - if needs_restart is False, container is healthy
+                needs_restart, reason = await self._evaluate_container_health(container, info)
+                if not needs_restart:
+                    # Container is healthy, auto-remove from quarantine
+                    await self._auto_unquarantine_container(quarantine_id, stable_id, container_name, container_id)
+                    return
+
+            logger.debug(f"Container {container_name} (stable_id: {stable_id}) is quarantined and still unhealthy, skipping")
+            return
+
 
         # Check if container needs healing
         needs_restart, reason = await self._evaluate_container_health(container, info)
@@ -411,6 +431,48 @@ class MonitoringEngine:
         except Exception as e:
             logger.error(f"Error performing health check: {e}")
             return False
+
+    async def _auto_unquarantine_container(self, quarantine_id: str, stable_id: str,
+                                            container_name: str, container_id: str) -> None:
+        """
+        Automatically remove a container from quarantine because it has auto-healed
+        Args:
+            quarantine_id: The ID used in the quarantine list
+            stable_id: Stable identifier for the container
+            container_name: Container name
+            container_id: Container ID
+        """
+        try:
+            # Remove from quarantine
+            config_manager.unquarantine_container(quarantine_id)
+
+            # Also clear the restart count so it starts fresh
+            config_manager.clear_restart_history(stable_id)
+
+            # Reset backoff delays
+            if stable_id in self._backoff_delays:
+                config = config_manager.get_config()
+                self._backoff_delays[stable_id] = config.restart.backoff.initial_seconds
+
+            # Log the event
+            event = AutoHealEvent(
+                timestamp=datetime.now(timezone.utc),
+                container_name=f"{container_name} ({stable_id})",
+                container_id=container_id,
+                event_type="auto_unquarantine",
+                restart_count=0,
+                status="success",
+                message="Container automatically removed from quarantine - auto-healed and now healthy"
+            )
+            config_manager.add_event(event)
+
+            # Send notification
+            await notification_manager.send_event_notification(event)
+
+            logger.info(f"Container {container_name} (stable_id: {stable_id}) automatically removed from quarantine - container auto-healed")
+
+        except Exception as e:
+            logger.error(f"Error auto-unquarantining container {container_name}: {e}")
 
     async def _handle_container_restart(self, container: Container, info: dict, reason: str) -> None:
         """

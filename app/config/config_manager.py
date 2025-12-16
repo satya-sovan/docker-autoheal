@@ -129,7 +129,7 @@ class NotificationsConfig(BaseModel):
     enabled: bool = Field(default=False, description="Enable notification system")
     services: List[NotificationService] = Field(default_factory=list, description="List of notification services")
     event_filters: List[str] = Field(
-        default_factory=lambda: ["restart", "quarantine", "health_check_failed"],
+        default_factory=lambda: ["restart", "quarantine", "health_check_failed", "auto_unquarantine"],
         description="Event types to send notifications for (empty = all events)"
     )
 
