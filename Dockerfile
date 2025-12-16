@@ -45,7 +45,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY run.py ./
 
-# Copy React build from stage 1 (vite outputs to ../static which is /static in container)
+# Copy React build from stage 1 (vite outputs to frontend/../static which is /frontend/../static)
 COPY --from=frontend-builder /static ./static/
 
 # Create data and log directories
