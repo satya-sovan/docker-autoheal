@@ -130,13 +130,13 @@ class AutoHealService:
             # Start Prometheus metrics server if enabled
             if config.observability.prometheus_enabled:
                 logger.info(f"Starting Prometheus metrics server on port {config.observability.metrics_port}")
+                start_http_server(config.observability.metrics_port)
+
             # Start notification manager
             logger.info("Starting notification manager...")
             await self.notification_manager.start()
             if config.notifications.enabled:
                 logger.info(f"Notifications enabled with {len(config.notifications.services)} service(s)")
-
-                start_http_server(config.observability.metrics_port)
 
             # Start monitoring engine
             logger.info("Starting monitoring engine...")
