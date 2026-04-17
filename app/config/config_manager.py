@@ -38,6 +38,15 @@ class RestartConfig(BaseModel):
     max_restarts_window_seconds: int = Field(default=600, ge=1, description="Time window for max restarts")
     backoff: BackoffConfig = Field(default_factory=BackoffConfig)
     respect_manual_stop: bool = Field(default=True, description="Respect manual container stops (exit code 0)")
+    start_period_seconds: int = Field(
+        default=0, ge=0,
+        description=(
+            "Grace period in seconds after a container starts during which health-check "
+            "failures are ignored (similar to Docker's --health-start-period). "
+            "Set to 0 to disable. Can be overridden per container with the "
+            "'autoheal.start-period' label."
+        )
+    )
 
 
 class ContainersConfig(BaseModel):

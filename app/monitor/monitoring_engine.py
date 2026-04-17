@@ -313,6 +313,60 @@ class MonitoringEngine:
 
         return True
 
+    def _get_start_period_seconds(self, info: dict) -> int:
+        """
+        Return the effective start-period (in seconds) for this container.
+
+        Priority:
+        1. Per-container label ``autoheal.start-period``
+        2. Global ``restart.start_period_seconds`` configuration value
+        3. 0 (disabled)
+
+        Args:
+            info: Container information dict
+        Returns:
+            Start period in seconds (0 means disabled)
+        """
+        labels = info.get("labels", {})
+        label_value = labels.get("autoheal.start-period")
+        if label_value is not None:
+            try:
+                return max(0, int(label_value))
+            except (ValueError, TypeError):
+                logger.warning(
+                    f"Container {info.get('name')} has invalid 'autoheal.start-period' "
+                    f"label value '{label_value}', falling back to global setting"
+                )
+
+        config = config_manager.get_config()
+        return config.restart.start_period_seconds
+
+    def _is_container_in_start_period(self, info: dict) -> tuple[bool, float, int]:
+        """
+        Check whether a container is still within its start-period grace window.
+
+        Args:
+            info: Container information dict
+        Returns:
+            Tuple of (in_start_period: bool, elapsed_seconds: float, start_period_seconds: int)
+        """
+        start_period = self._get_start_period_seconds(info)
+        if start_period <= 0:
+            return False, 0.0, 0
+
+        started_at_str = info.get("started_at")
+        if not started_at_str:
+            return False, 0.0, start_period
+
+        try:
+            # Docker returns RFC3339 timestamps; Python 3.7+ handles the offset format
+            started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+            elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+            return elapsed < start_period, elapsed, start_period
+        except (ValueError, TypeError) as e:
+            logger.debug(f"Could not parse StartedAt '{started_at_str}' for container {info.get('name')}: {e}")
+            return False, 0.0, start_period
+
     async def _evaluate_container_health(self, container: Container, info: dict) -> tuple[bool, str]:
         """
         Evaluate if container needs restart based on health checks
@@ -357,8 +411,21 @@ class MonitoringEngine:
 
         # Check health status
         if restart_mode in ["health", "both"]:
-            # Get stable identifier for health check lookup
             container_name = info.get("name")
+
+            # Respect the start-period grace window: skip health-check evaluation for
+            # containers that recently started and may still be initialising.  This
+            # mirrors Docker's native ``--health-start-period`` behaviour and prevents
+            # autoheal from restarting slow-starting containers before they have had a
+            # chance to become healthy.
+            in_start_period, elapsed, start_period = self._is_container_in_start_period(info)
+            if in_start_period:
+                logger.debug(
+                    f"Container {container_name} is within start period "
+                    f"({elapsed:.1f}s / {start_period}s elapsed) – "
+                    f"skipping health evaluation (container may still be initialising)"
+                )
+                return False, f"Container in start period ({elapsed:.1f}s/{start_period}s)"
 
             # Check custom health checks (by stable_id, name, then ID for backwards compatibility)
             custom_hc = config_manager.get_custom_health_check(stable_id)
@@ -374,8 +441,15 @@ class MonitoringEngine:
             # Then check Docker native health
             health = info.get("health")
             if health:
-                status = health.get("status")
-                if status == "unhealthy":
+                health_status = health.get("status")
+                if health_status == "starting":
+                    # Docker's own health-check start period is still active – do not restart
+                    logger.debug(
+                        f"Container {container_name} Docker health status is 'starting' "
+                        f"– health check grace period active, skipping restart"
+                    )
+                    return False, "Docker health check in starting state"
+                if health_status == "unhealthy":
                     return True, "Docker health check reports unhealthy"
 
         # Check Uptime-Kuma monitor status (if configured and enabled)
